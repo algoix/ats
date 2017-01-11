@@ -1,0 +1,253 @@
+// list 0: SPY, index based trading both momentum and reversion
+//list 1 nd 2 : mean reversion and pairs trading 
+// list 3: when oil is in trend, so only momentum strategy
+// lis 4: any sector ETF in trend so  only momentum strategy
+
+OptimizerSetEngine("cmae"); // you can also use "spso" or "trib" here
+
+_SECTION_BEGIN("SPY-Variables");
+sentiment_SPY=ParamList("sentiment", "N|NeU|P", 1);
+rating_SPY=ParamList("rating", "Z|O|TW|TH|F", 2);
+manualON_SPY_P=ParamList("manual on SPY", "0|1", 0);
+MOM_RAN=ParamList("Momentum or Range", "0|1", 0); // range will be output from daily analysis. 
+
+SetForeign("SPY");
+O_SPY = O;
+H_SPY = H;
+L_SPY = L;
+C_SPY = C;
+v_SPY = IIf(V>0,Volume,1);
+SP_SPY=O_SPY[0];
+RestorePriceArrays();
+// # weekly High OR Low is range. SL OR profit target above this point. if price in this range then RANGE 
+L_W_SPY=TimeFrameGetPrice( "L", inWeekly, -1 ); 
+H_W_SPY=TimeFrameGetPrice( "H", inWeekly, -1 ); 
+// # price above Yesterday closing is TRADING ON for long and triger of short sell  
+C_YDay_SPY = TimeFrameGetPrice("C_SPY", inDaily, -1); // yesterdays close https://www.amibroker.com/guide/h_timeframe.html
+
+C_5Min_SPY=TimeFrameGetPrice("C_SPY", in5minute, -1);// TimeFrameExpand( ma5_13, in5Minute)
+C_hour_SPY=TimeFrameGetPrice("C_SPY",inHourly, -1);// TimeFrameExpand( ma5_13, in5Minute)
+L_5Min_SPY=TimeFrameGetPrice("L_SPY",in5minute, -1);// TimeFrameExpand( ma5_13, in5Minute)
+H_5min_SPY=TimeFrameGetPrice("H_SPY",in5minute,-1);
+H_Min_SPY=TimeFrameGetPrice("H_SPY", in1minute, -1);// TimeFrameExpand( ma5_13, in5Minute)
+C_Min_SPY=TimeFrameGetPrice("C_SPY", in1minute, -1);// TimeFrameExpand( ma5_13, in5Minute)
+_SECTION_END();
+
+_SECTION_BEGIN("UWTI-Variables");
+SetForeign("UWTI");
+O_UWTI = O;
+C_UWTI = C;
+H_UWTI = H;
+L_UWTI = L;
+V_UWTI=IIf(V>0,Volume,1);
+
+RestorePriceArrays();
+
+C_5Min_UWTI=TimeFrameGetPrice("C_UWTI", in5minute, -1);// TimeFrameExpand( ma5_13, in5Minute)
+C_hour_UWTI=TimeFrameGetPrice("C_UWTI",inHourly, -1);// TimeFrameExpand( ma5_13, in5Minute)
+
+_SECTION_END();
+
+_SECTION_BEGIN("OPTIMIZATION");
+//##//SPY//
+//const_SPY =Optimize("const",3,0.5, 5, 0.1 );
+const =3.6;
+//ADX_L_SPY=Optimize("ADX_L",35,15,65,1 );
+ADX_L_SPY=48;
+//ST_SPY=Optimize("ST",15,10,25,1 );
+ST=15;
+//MT_SPY=Optimize("MT",40,30,50,1 );
+MT=30;
+//inv_SPY=Optimize("investment",45000,30000,60000,1000 );
+inv_SPY=45000;
+_SECTION_END();
+
+
+
+_SECTION_BEGIN("SPY STRATEGY");//HEDGING by SPXL,SPXU,SPXS 2000K amount for 23 SPY ( approximation)
+
+//#1  Regression
+
+dtds=log(C_5Min_SPY)-log(Ref(C_5Min_SPY,-1));
+prReg=LinRegIntercept(dtds,ST)+LinRegSlope(dtds,ST)*5;
+prSPY=exp(prReg+log(Ref(C_5Min_SPY,-1)));
+
+//#2 ATR based
+ARC_SPY = const * ATR(ST);
+SIC_H_SPY = Ref(HHV(H_5Min_SPY,ST) - ARC_SPY,-1);//long
+SIC_L_SPY = Ref(LLV(L_5Min_SPY,ST) + ARC_SPY,-1);//Short
+SICmin_SPY=(SIC_H_SPY-SIC_L_SPY)/2+C_hour_SPY;//ATC H and L based 
+SDsic_SPY = StDev(SICmin_SPY,ST);
+uplineSIC_SPY = SICmin_SPY + 2*SDsic_SPY;
+downlineSIC_SPY =SICmin_SPY - 2*SDsic_SPY;
+SIC_SPY=(Ref(H_SPY,-1)-Ref(L_SPY,-1)-ARC_SPY)/2+Ref(O_SPY,-1);
+
+//#3 VWAP
+TodayVolume = Sum(v_SPY,MT);
+average = (Ref(H_SPY,-1)+Ref(L_SPY,-1)+Ref(O_SPY,-1)+Ref(C_SPY,-1))/4;
+VWAP_SPY_L = Sum (average * v_SPY,MT ) / TodayVolume;
+
+//#4 ROC
+avgROC=ROC(O_SPY,MT);
+sdROC=StDev(ROC(O_SPY,ST),ST);
+upROC=avgROC+1.2*sdROC;// ROC not at extreme level
+dnROC=avgROC-1.2*sdROC;
+
+//# Trigger line
+TR_U_SPY=Max(Max(VWAP_SPY_L,SIC_SPY),prSPY);
+TL_D_SPY=Min(Min(VWAP_SPY_L,SIC_SPY),prSPY);
+
+
+//# upline and downline
+SD_SPY=StDev(O_SPY,MT);
+upline_SPY=C_5Min_SPY +1.2*SD_SPY;
+dnline_SPY=C_5Min_SPY -1.2*SD_SPY;
+
+//#sell or cover line
+sellline_SPY=C_5Min_SPY +2*SD_SPY;
+coverline_SPY=C_5Min_SPY -2*SD_SPY;
+
+//#Caution line VWAP
+CUMVolume = cum(v_SPY);
+average = (H_SPY+L_SPY+O_SPY+C_SPY)/4;
+VWAP_SPY = Cum(average * v_SPY) /CUMVolume;
+//^^ O_SPY>VWAP_SPY to buy
+
+//#momentum indicator based
+buy_SPY=((Cross(O_SPY,TR_U_SPY) AND ADX()>20) OR Cross(TR_U_SPY,upline_SPY) OR Cross(ROC(O_SPY,5),upROC))  AND InWatchList(0);//AND O_SPY>VWAP_SPY
+short_SPY=((Cross(TL_D_SPY,O_SPY) AND ADX()>20) OR Cross(dnline_SPY,TL_D_SPY) OR Cross(dnROC,ROC(O_SPY,5))) AND InWatchList(0);// momentum with predicted value and MR with ROC
+sell_SPY=Cross(O_SPY,sellline_SPY) AND InWatchList(0);// both sell and cover should with position >0
+Cover_SPY= Cross(coverline_SPY,O_SPY) AND InWatchList(0);
+
+
+
+//list three for rated 5 stocks
+//list four stocks are technical based for both buy or sell
+
+_SECTION_END();
+
+_SECTION_BEGIN("3x UWTI only MOMENTUM STRATEGY");// when oil is in trend, DWTI is for mean reversion
+
+//#1  Regression
+
+dtds_UWTI=log(C_5Min_UWTI)-log(Ref(C_5Min_UWTI,-1));
+prReg_UWTI=LinRegIntercept(dtds_UWTI,ST)+LinRegSlope(dtds_UWTI,ST)*5;
+prUWTI=exp(prReg_UWTI+log(Ref(C_5Min_UWTI,-1)));
+
+//#3 VWAP
+TodayVolume = Sum(v_UWTI,MT);
+average = (Ref(H_UWTI,-1)+Ref(L_UWTI,-1)+Ref(O_UWTI,-1)+Ref(C_UWTI,-1))/4;
+VWAP_UWTI = Sum (average * v_UWTI,MT ) / TodayVolume;
+
+expected_UWTI=Max(prUWTI,VWAP_UWTI);
+
+
+SL_UWTI_sell=O_UWTI-Max(ATR(ST)*const,MA(O_SPY,50)*0.0005);
+SL_UWTI_cover=O_UWTI+Max(ATR(ST)*const,MA(O_SPY,50)*0.0005);
+
+//#momentum indicator based
+buy_UWTI=O_UWTI>expected_UWTI AND InWatchList(3);
+short_UWTI=O_UWTI<expected_UWTI AND   InWatchList(3);// momentum with predicted value and MR with ROC
+sell_UWTI=(short_UWTI OR SL_UWTI_sell)  AND InWatchList(3);// both sell and cover should with position >0
+Cover_UWTI=(buy_UWTI OR SL_UWTI_cover)  AND InWatchList(3);
+
+//list three for rated 5 stocks
+//list four stocks are technical based for both buy or sell
+_SECTION_END();
+
+
+/// PAIRS and 3x ETFs strategy
+
+_SECTION_BEGIN("STOCK SPECIFIC");
+//1x//QQQ,DIA,IWM : SPY is for momentum
+//3x//(DWTI-UWTI),(SQQQ-TQQQ),(UPRO-SPXU/SPXS),(ERX-ERY),(TNA-TZA)
+//Sectors//XLV,XLF,XLP,XLE,XLK,XLB,XLU,XLI
+SetForeign("QQQ");
+O_QQQ = O;
+RestorePriceArrays();
+SetForeign("DIA");
+O_DIA = O;
+RestorePriceArrays();
+SetForeign("IWM");
+O_IWM = O;
+RestorePriceArrays();
+SetForeign("DQTI");
+O_DWTI = O;
+RestorePriceArrays();
+SetForeign("SQQQ");
+O_SQQQ = O;
+RestorePriceArrays();
+
+ratio=O_QQQ/O_DIA;
+
+AddToComposite(ratio,"~~pairs","QQQ/DIA");
+_SECTION_END();
+
+_SECTION_BEGIN("3X ETF STRATEGY");
+O_hour_DWTI=TimeFrameGetPrice("O_DWTI",inHourly, -1);
+O_hour_SQQQ=TimeFrameGetPrice("O_SQQQ",inHourly, -1);
+
+buycontra_DWTI=O_DWTI<O_hour_DWTI*0.955 AND InWatchList(2);
+buycontra_SQQQ=O_SQQQ<O_hour_SQQQ*0.955 AND InWatchList(2);
+shortcontra_DWTI=O_DWTI>O_hour_DWTI*1.045 AND InWatchList(2);
+shortcontra_SQQQ=O_SQQQ>O_hour_SQQQ*0.045 AND InWatchList(2);
+sellcontra_DWTI=O_DWTI>O_hour_DWTI*1.02 AND InWatchList(2);
+sellcontra_SQQQ=O_SQQQ>O_hour_SQQQ*1.02 AND InWatchList(2);
+covercontra_SQQQ=O_SQQQ<O_hour_SQQQ*0.98 AND InWatchList(2);
+covercontra_DWTI=O_DWTI<O_hour_DWTI*0.98 AND InWatchList(2);
+_SECTION_END();
+
+_SECTION_BEGIN("PAIRS STRATEGY");
+avgROC=ROC(ratio,40);
+sdROC=StDev(ROC(ratio,40),20);
+upROC=avgROC+1.5*sdROC;// ROC not at extreme level
+dnROC=avgROC-1.5*sdROC;
+
+sell_QQQ=Short_QQQ=ROC(ratio,12)>upROC AND  InWatchList(1);
+buy_QQQ=cover_QQQ=ROC(ratio,12)<dnROC AND  InWatchList(1);
+
+sell_DIA=Short_DIA=ROC(ratio,12)<dnROC AND  InWatchList(1);
+buy_DIA=cover_QQQ=ROC(ratio,12)>upROC AND  InWatchList(1);
+_SECTION_END();
+
+
+_SECTION_BEGIN("SIGNAL");
+
+Buy=buy_SPY ;//list 0 with single lev ETF for mean reversion and list 1 with x3 liv ETFs for contra
+Short=short_SPY ;
+sell=sell_SPY;
+cover=cover_SPY;
+
+Buy=ExRem(Buy,Sell);
+sell=ExRem(Sell,Buy);
+short=ExRem(Short,cover);
+cover=ExRem(cover,Short);
+LastBuy = LastValue(Buy);
+LastShort = LastValue(Short);
+LastSell = LastValue(Sell);
+LastCover = LastValue(Cover);
+e = Equity(1,0);
+start = ParamDate( "Start Date", "2016-04-01" );
+end=ParamDate("End Date", "2016-08-01" );
+Lprofit = e - ValueWhen( Buy, e); 
+Sprofit = e - ValueWhen( Short, e); 
+_SECTION_END();
+
+
+_SECTION_BEGIN("PLOT"); 
+
+Plot(O_SPY, "Open", IIf( Flip(Buy or cover,Sell OR short), colorlime,  colorred), styleline);
+Plot(VWAP_SPY,"VWAP",colorLightYellow,styleline);
+Plot(TR_U_SPY,"Trigger_B",colorLightYellow,styleline);
+Plot(TR_U_SPY,"Trigger_S",colorLightYellow,styleline);
+Plot(upline_SPY,"upline",colorLightYellow,styleline);
+Plot(dnline_SPY,"dnline",colorLightYellow,styleline);
+Plot(upROC,"upROC",colorgreen,styleLeftAxisScale);
+Plot(dnROC,"dnROC",colorgreen,styleLeftAxisScale);
+
+PlotShapes(IIf(Buy, shapeHollowCircle, shapeNone),colorGreen, 0,L, Offset=-50);
+PlotShapes(IIf(Short,shapeHollowCircle, shapeNone),colorRed, 0, H, Offset=40);
+//Plot(e,"Equity",colorlightBlue,styleLeftAxisScale);
+PlotShapes(IIf(Cover,shapeHollowCircle, shapeNone),colorLightGrey, 0, L, Offset=-40);
+PlotShapes(IIf(Sell, shapeHollowCircle, shapeNone),colorLightOrange, 0,H, Offset=50);
+_SECTION_END();
