@@ -1,0 +1,309 @@
+//http://www.amibroker.com/kb/tag/exploration/
+//http://www.amibroker.com/guide/afl/staticvargetrankedsymbols.html
+//http://www.amibroker.com/kb/category/afl/explorations/
+//http://www.amibroker.com/kb/2006/03/04/how-to-export-quotations-from-amibroker-to-csv-file/
+_SECTION_BEGIN("algotrade_V5");
+
+AutoTradingParam = True;        
+SubmitOrders = True;            
+Tracing = False;
+/*MarketOpen = 000000;//09:30:00;
+MarketClose = 235959;//04:00:00 
+MarketON = TimeNum() >= MarketOpen AND Now( 4 ) < MarketClose;
+MarketOFF = Now( 4 ) >= MarketClose ;//day's over*/
+
+BaseRiskPcnt = 1.00;    
+AccountCutout = 10000;  
+
+//ABName = StrMid(Name(),0,3) + StrMid(Name(),4,3);
+ABName=getfndata("Alias");
+IBName =getfndata("Alias");
+	
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+if( IsNull( AutoTrading ) ) 
+	StaticVarSet("AutoTrading"+ABName,0);
+
+if ( AutoTrading==0 && AutoTradingParam )
+    StaticVarSetText("OrderID"+ABName,"");
+
+if ( AutoTrading && AutoTradingParam==0 )
+    StaticVarSetText("OrderID"+ABName,"");
+
+if (AutoTradingParam) 
+	StaticVarSet("AutoTrading"+ABName,1);
+else  
+	StaticVarSet("AutoTrading"+ABName,0);
+
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+ 
+Filename 	= _DEFAULT_NAME();
+//////BID-ASK
+spread=(GetRTData("Ask")-GetRTData("Bid"));
+FQ=spread;
+BuyP=GetRTData("Bid")+FQ/5;//easy to buy
+SellP=GetRTData("Ask")-FQ/5;
+
+//Strategy#####################################################
+function Cycle_Phase()
+{
+    Divider = 5; 
+    PriceIn = ( ( H + L ) / 2 );
+    DCPhase = RealPart = Imagpart = Period = Detrender = Q1 = I1 = jI = jQ = I2 = Q2 = Re = Im = SmoothPeriod = DCPeriod = 0;
+    pi = 4 * atan( 1 );
+    DTR = pi / 180;
+    RTD = 180 / pi;
+    SmoothX = WMA( PriceIn * 100, Divider);
+
+    for ( i = 7;i < BarCount;i++ )
+    {
+        Detrender[i] = ( 0.0962 * SmoothX[i] + 0.5769 * SmoothX[i-2] - 0.5769 *SmoothX[i-4] - 0.0962 * SmoothX[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        Q1[i] = ( 0.0962 * Detrender[i] + 0.5769 * Detrender[i-2] - 0.5769 *Detrender[i-4] - 0.0962 * Detrender[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        I1[i] = Detrender[i-3];
+        jI[i] = ( 0.0962 * I1[i] + 0.5769 * I1[i-2] - 0.5769 * I1[i-4] - 0.0962* I1[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        jQ[i] = ( 0.0962 * Q1[i] + 0.5769 * Q1[i-2] - 0.5769 * Q1[i-4] - 0.0962* Q1[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        I2[i] = I1[i] - jQ[i];
+        Q2[i] = Q1[i] + jI[i];
+        I2[i] = 0.2 * I2[i] + 0.8 * I2[i-1];
+        Q2[i] = 0.2 * Q2[i] + 0.8 * Q2[i-1];
+        Re[i] = I2[i] * I2[i-1] + Q2[i] * Q2[i-1];
+        Im[i] = I2[i] * Q2[i-1] - Q2[i] * I2[i-1];
+        Re[i] = 0.2 * Re[i] + 0.8 * Re[i-1];
+        Im[i] = 0.2 * Im[i] + 0.8 * Im[i-1];
+        Period[i] = Nz( 360 / ( atan( Im[i] / Re[i] ) * RTD ) );
+        Period[i] = Max( Min( Period[i], 1.5 * Period[i-1] ), 0.67 * Period[i-1]);
+        Period[i] = Min( Max( Period[i], 6 ), 50 );
+        Period[i] = 0.2 * Period[i] + 0.8 * Period[i-1];
+        SmoothPeriod[i] = 0.33 * Period[i] + 0.67 * SmoothPeriod[i-1];
+        DCPeriod[i] = int( SmoothPeriod[i] + 0.5 );
+    }
+
+    return DCPeriod;
+}
+
+
+DCPeriod = Cycle_Phase();
+bu=IIf(Dcperiod<20,1,0);
+Se=IIf(Dcperiod>80,1,0);
+
+//BuyValidation=sommebuy>6 AND sommesell<2 AND ret<0;// AND C<MA(C,300)*1.03 AND C>MA(C,300)/1.04 AND V>MA(V,600);
+//Short=sommesell>7 AND sommebuy<2 AND ret>0.2;
+watchlistcheck=InWatchList(10);
+//Buy=bu;// AND buyind>5;//INdex should be above average to avoid down market, stabalization
+Buy=bu AND watchlistcheck;
+Short=Se;
+ShortPrice = Min(Ref(C,-1),C); //Or as appropriate for your trading rules.
+BuyPrice = Max(Ref(C,-1),C); //Or as appropriate for your trading rules.
+Sell=Cover=0;
+Plot(C , "algotrade ", colorBlue, styleLine);
+PlotShapes( Buy* shapeUpArrow , colorGreen, 0);
+PlotShapes( Short* shapeDownArrow , colorRed, 0); 
+
+
+ 
+/////////////////// Automation Code //////////////////
+
+// First check if we've just started a new bar. THIS CODE RELIES ON PREFERENCES/INTRADAY SET TO START OF INTERVAL.
+
+PrevDT = StaticVarGet("DateTime"+ABName);
+DT = LastValue(DateTime());
+NewBar = DT != PrevDT;                        
+StaticVarSet("DateTime"+ABName,DT);
+
+if( NewBar )
+    StaticVarSetText("OrderID"+ABName,"");
+ 
+LastBuy = LastValue(Buy);
+LastShort = LastValue(Short);
+LastBuyPrice=LastValue(BuyPrice);
+
+
+
+Filter=Buy AND LastValue(C)>=LastBuyPrice; //AND watchlistcheck ;
+
+IBPosSize=0;
+
+ibc = GetTradingInterface("IB");
+IBcStatus = ibc.IsConnected();
+
+IBcStatusString = WriteIf(IBCStatus==0,"TWS Not Found",WriteIf(IBCStatus==1,"Connecting to TWS",WriteIf(IBCStatus==2,"TWS OK",WriteIf(IBCStatus==3,"TWS OK (msgs)",""))));
+
+// Work out how much money there is and adjust risk size
+
+CashBalanceStr = ibc.GetAccountValue("NetLiquidationByCurrency");
+if (CashBalanceStr == "")
+    CashBalance = 0;
+else
+    CashBalance = StrToNum(CashBalanceStr);
+
+// Note CashBalance is in AUD for my account, so following calculations are all in AUD.
+// If trading instruments denominated in multiple currencies, e.g. FX, you will need to adjust this code. 
+//     It is possible to dynamically lookup the IB FX price
+//     but too extensive for me to include the code here
+function stockprice()
+{base=1;
+	for(i=0;i<=LastValue(C);i++){
+	base++;
+	}
+	roundoff=int(base/5)*5;
+return lastvalue(roundoff);
+}
+
+base=stockprice();
+IBOrderSize =int(100000/base); //(int(LastValue(PositionSize)/10000)*10000)/(20*LastValue(C));  // Round to nearest $10k
+
+
+OldOrderID = StaticVarGetText("OrderID"+ABName);
+if (AutoTrading == 0 && OldORderID == "" && (LastBuy || LastShort))
+{
+    // If there would have been an order during Autotrading, then create a dummy OID to test all other code paths
+    // e.g. logging, explore output etc.
+    StaticVarSetText("OrderID"+ABName,"DUMMY");
+}
+
+if( IBcStatus AND AutoTrading AND (CashBalance > AccountCutout))
+{
+    OrderID = StaticVarGetText("OrderID"+ABName);
+    BuyPending=ibc.IsOrderPending(OrderID);
+    SellPending=ibc.IsOrderPending(OrderID);
+    averageprice=0;
+    IBPosSize = ibc.GetPositionSize( IBName );
+	// Only enter once the price moves in my desired direction, otherwise wait until next run of the exploration 	//     and check again, and again., ...
+    openpos = ibc.GetPositionList();   
+        for( i = 0; ( symbol = StrExtract( openpos, i ) ) != ""; i++ ) 
+		{ 
+			if(symbol==getfndata("Alias"))
+			{
+			aprice = ibc.GetPositionInfo(symbol, "Avg. cost");
+			averageprice=aprice; 
+			} 
+		}
+
+    if( LastBuy AND OrderID == "" AND LastValue(C)>=LastBuyPrice AND  ibc.GetPositionSize(getfndata("Alias"))==0)  
+    {
+        OID= ibc.PlaceOrder( getfndata("Alias"), "Buy",IBOrderSize, "MKT",LastValue(C), 0, "Day", True); 
+        StaticVarSetText("OrderID"+ABName,OID);
+        for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        if (SubmitOrders)
+        {
+            for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+
+             tradetime=GetPerformanceCounter()/1000; 
+             while ((GetPerformanceCounter()/1000 - tradetime) <2) // give up after 5 seconds
+             {
+                 ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                 ORderStatus = ibc.GetStatus( OID, True);
+                 if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted" || ORderStatus == "Filled")
+                     break;
+             }
+        }
+                     
+    }
+ //  if(( LastValue(C)>(averageprice*1.015) OR LastValue(C)<(averageprice*0.99)) AND OrderID == "" AND ibc.GetPositionSize(Name())>0)
+  if( LastValue(C)>(averageprice*1.01) AND OrderID == "" AND ibc.GetPositionSize(getfndata("Alias"))>0)
+    {
+		OID = ibc.PlaceOrder(getfndata("Alias"), "Sell",IBPosSize, "LMT",averageprice*1.01, 0, "Day",True );
+	
+        for (dummy=0; dummy<40; dummy++)   ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        StaticVarSetText("OrderID"+ABName,OID);
+        if (SubmitOrders)
+        {
+            //Usually takes about a second for TWS to get acknowledgement from IB, so delay for 2 secs for safety
+            for (dummy=0; dummy<40; dummy++)   ibc.Sleep(50);  
+
+            tradetime=GetPerformanceCounter()/1000; 
+            while ((GetPerformanceCounter()/1000 - tradetime) <3) // give up after 5 seconds
+            {
+                ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                ORderStatus = ibc.GetStatus( OID, True);
+                if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted"|| ORderStatus == "Filled")
+                    break;
+            }
+        }
+    }
+     
+      // Note LastOrderID will remain "" while waiting for price improvement so we may skip entering for the whole of the bar
+    LastOrderID = StaticVarGetText("OrderID"+ABName);
+
+    ORderStatus = ibc.GetStatus( LastOrderID , True );
+    if( ORderStatus != "" ) StaticVarSetText("OrderStatus"+ABName,ORderStatus);
+}
+else IBPosSize = 0;
+ 
+LastOrderID = StaticVarGetText("OrderID"+ABName);
+ORderStatus = StaticVarGetText("OrderStatus"+ABName);
+Title = Filename+":"+ABName+"\n"+" Trading Mode:"+WriteIf( AutoTrading,"ON"+WriteIf( SubmitOrders," -Create and Transmit"," - Create Only"),"OFF")+"\n"+" Last Signal: "+WriteIf(LastBuy,"BUY",WriteIf
+(LastShort,"SHORT","NoSignal"))+"\n"+" IB Status: "+IBcStatusString+"\n"+" Last OrderID:"+LastOrderID+","+"\n"+" OrderStatus:"+ORderStatus+WriteIf(ORderStatus=="Error",ibc.GetLastError( LastOrderID
+),"")+"," + "LastTime:  "+DateTimeToStr(LastValue(DateTime()))+"\n";
+AddTextColumn(FullName(),"name",200);
+AddColumn(Buy,"Buy",1.0);
+AddColumn(DCPeriod,"Buy Signal",1);
+AddColumn(CashBalance,"Cash",1.2);
+AddColumn(IIf(AutoTrading,Asc("Y"),Asc("N")),"AT",formatChar);
+AddColumn(IIf(SubmitOrders,Asc("Y"),Asc("N")),"Transmit",formatChar);
+AddColumn(IIf(Buy,Asc("L"),IIf(Short,Asc("S"),Asc(" "))),"L/S",formatChar);
+AddColumn(IBOrderSize,"Qty",1.0);
+AddColumn(IIf(Buy,BuyPrice,ShortPrice),"Entry",1.5);
+AddTextColumn(IBcStatusString,"IBC Status",1.0);
+AddTextColumn(LastOrderID,"LastOID",1.0);
+AddTextColumn(ORderStatus,"OrderStatus",1.0);
+
+/*if ( OldOrderID == "" && LastOrderID != "")    // No order previously in place for this bar, this execution created one
+{
+	fh = fopen( "TWSTrade.log", "a"); 
+	if( fh ) 
+	{ 
+		fputs( Now(), fh ); 
+		fputs( ", ", fh );
+
+		fputs( "Ticker: ", fh );
+
+		fputs( IBName, fh );
+		fputs( ", ", fh );
+
+		fputs( "BarTime: ", fh );
+		
+		fputs( DateTimeToStr(DT), fh ); 
+		fputs( ", ", fh);
+	
+		qs = StrFormat("Cash: %.2f, ",CashBalance);
+		fputs( qs, fh ); 
+
+		fputs( "AT: ", fh );
+		if (AutoTrading) fputs( "Y, " , fh );
+		else fputs( "N, " , fh );  
+
+		fputs( "Submit: ", fh );
+		if (SubmitOrders) fputs( "Transmit, " , fh );
+		else fputs( "Create_Only, " , fh );  
+
+		if (LastBuy) fputs( "Buy, ", fh);
+		else if (LastShort) fputs( "Short, ", fh);
+		else fputs( "Not_Valid, ", fh);
+
+		qs = StrFormat("%.0f, ", IBOrderSize ); 
+		fputs( qs, fh ); 
+		qs = StrFormat("Entry: %.5f, ISLARC: %.2f, Stop: %.5f, Profit: %.5f, ", LastBuyPrice,LastBuy);
+		fputs( qs, fh );	
+		fputs( "IBC Status: ", fh );
+		fputs( IBCStatusString, fh );
+		fputs( ", ", fh);
+
+		fputs( "LastOID: ", fh );
+		fputs( LastOrderID, fh );
+		fputs( ", ", fh);
+
+		fputs( "OrderStatus: ", fh );
+		fputs( ORderStatus, fh );
+		fputs( ", ", fh);
+
+		if (ORderStatus=="Error")
+			fputs( ibc.GetLastError( LastOrderID ), fh);
+		fputs( ", ", fh);
+
+		fputs( "\n", fh );
+
+		fclose( fh ); 
+	} 
+}*/
+
+_SECTION_END();

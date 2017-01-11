@@ -1,0 +1,113 @@
+_SECTION_BEGIN("algotrade_test");
+AutoTradingParam = True;         //ParamToggle("AutoTrading","Off|On",0);
+SubmitOrders = True;             //ParamToggle("Create or Transmit","Create Only|Create and Transmit",False);
+Tracing = False;
+MarketOpen = 093000;//09:30:00;
+MarketClose = 160000;//04:00:00 
+MarketON = TimeNum() >= MarketOpen AND Now( 4 ) < MarketClose;
+MarketOFF = Now( 4 ) >= MarketClose ;//day's over
+
+BaseRiskPcnt = 1.00;    // Percent of account risk per trade
+AccountCutout = 10000;  // Stop trading if account falls to $X
+
+
+// Interactive Brokers ticker symbols may have unwanted characters for our static variable names. Remove them.
+
+ABName = StrMid(Name(),0,3) + StrMid(Name(),4,3);
+IBName = Name();
+	
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+if( IsNull( AutoTrading ) ) 
+	StaticVarSet("AutoTrading"+ABName,0);
+
+if ( AutoTrading==0 && AutoTradingParam )
+{
+  // About to start AutoTrading after it's been off, so clear all order statuses. 
+        StaticVarSetText("OrderID"+ABName,"");
+
+}
+if ( AutoTrading && AutoTradingParam==0 )
+{
+  // About to stop AutoTrading after it's been on, so clear all order statuses.
+
+        StaticVarSetText("OrderID"+ABName,"");
+}
+
+if (AutoTradingParam) 
+	StaticVarSet("AutoTrading"+ABName,1);
+else  
+	StaticVarSet("AutoTrading"+ABName,0);
+
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+ 
+Filename 	= _DEFAULT_NAME();
+
+
+IBPosSize=0;
+
+ibc = GetTradingInterface("IB");
+IBcStatus = ibc.IsConnected();
+
+IBcStatusString = WriteIf(IBCStatus==0,"TWS Not Found", 
+						WriteIf(IBCStatus==1,"Connecting to TWS", 
+							WriteIf(IBCStatus==2,"TWS OK", 
+								WriteIf(IBCStatus==3,"TWS OK (msgs)",""))));
+
+// Work out how much money there is and adjust risk size
+
+CashBalanceStr = ibc.GetAccountValue("NetLiquidationByCurrency");
+if (CashBalanceStr == "")
+    CashBalance = 0;
+else
+    CashBalance = StrToNum(CashBalanceStr);
+
+
+
+
+OldOrderID = StaticVarGetText("OrderID"+ABName);
+if (AutoTrading == 0 && OldORderID == "" && (LastBuy || LastShort))
+{
+    // If there would have been an order during Autotrading, then create a dummy OID to test all other code paths
+    // e.g. logging, explore output etc.
+    StaticVarSetText("OrderID"+ABName,"DUMMY");
+}
+
+if( IBcStatus AND AutoTrading AND (CashBalance > AccountCutout) AND LastValue(MarketON))
+{
+    OrderID = StaticVarGetText("OrderID"+ABName);
+  
+   
+
+	ibc.CancelAllPendingOrders();
+   
+    
+      // Note LastOrderID will remain "" while waiting for price improvement so we may skip entering for the whole of the bar
+    LastOrderID = StaticVarGetText("OrderID"+ABName);
+
+    ORderStatus = ibc.GetStatus( LastOrderID , True );
+    if( ORderStatus != "" ) StaticVarSetText("OrderStatus"+ABName,ORderStatus);
+}
+else IBPosSize = 0;
+ 
+
+
+
+
+Seconds = int( GetPerformanceCounter()/1000);
+Event =  Seconds%119 == 0 ; 
+if ( Event  ) 
+{
+	Executed =  Nz ( StaticVarGet ( "Executed"));
+	if (!Executed)
+	{
+		ShellExecute("C:\\Program Files\\AmiBroker\\algocode.js", "",""); 
+		StaticVarSet ( "Executed", 1 ); 
+	}
+}
+else
+StaticVarSet ( "Executed", 0); 
+
+RequestTimedRefresh(1); 
+Title = "Event = " + Event + 
+"\n";
+_SECTION_END();
