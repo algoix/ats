@@ -1,0 +1,30 @@
+Range = 10;
+
+HiC = HHV( Close, Range );
+LoC = LLV( Close, Range );
+Stoc = ( Close - LoC ) / ( HiC - LoC );
+
+Lookback = Range - 1;
+
+Event = Ref( Cross( Stoc, 0.2 ), -Lookback );
+
+PctGainRange = 0.5; // defines % gain range for X axis
+
+FuturePrice = ROC( Close, Lookback );
+FuturePrice = Min( PctGainRange, Max( -PctGainRange, FuturePrice ) ); // keep values in range
+FuturePrice = Round( 100 * ( FuturePrice + PctGainRange )/( 2 * PctGainRange ) ); // map range to to 0..100
+
+PredictBin = 0;
+
+for( i = 0; i < BarCount AND BarCount > 100; i++ )
+{
+    if( Event[ i ] ) PredictBin[ FuturePrice[ i ] ]++;
+}
+
+chartname = "Probability distribution " + Name();
+
+XYChartSetAxis(chartname, "[%gain]", "[n]" );
+for( i = 0; i < BarCount AND i <= 100; i++ )
+{
+    XYChartAddPoint( chartname, "", ( i * 2 * PctGainRange / 100 - PctGainRange ), PredictBin[ i ], colorGreen );
+}

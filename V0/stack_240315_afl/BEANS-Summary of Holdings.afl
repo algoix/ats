@@ -1,0 +1,175 @@
+
+// =============== Holdings=======================
+// Add as many holdings as you want, formatted as:
+// Hx = "Symbol,Shares,DateofPurchase,BuyPrice";
+// Example: H1 = "SPY,500,06/04/2008,148.50 ";
+// Omit share price to automatically use EOD price.
+// Avoid spaces after and before commas.
+// Enter TotalSymbolCount to match the number of Holdings
+H1 = "SPY,100,06/04/2007,148.50";
+H2 = "GLD,100,06/05/2008,86.00";
+H3 = "OAKBX,100,11/05/2007";
+H4 = "PSPFX,100,03/10/2008";
+H5	= "BEARX,100,05/21/2008";
+TotalSymbolCount = 5;
+// =============== End of Holdings==================
+
+// ============== Initialize =======================
+Title = "";
+CellHeight 	= Param("CellHeight", 20, 10, 30, 1);
+CellWidth 	= Param("CellWidth",  90, 70, 110,1);
+PlotSpace	=	Param("PlotSpace", 50, 20, 80, 1);
+// Toggle ShowPlot to plot the Total value of the holdings
+ShowPlot		=	ParamToggle("ShowPlot","No|Yes");
+SymList = "";
+ShrList = "";
+DatList = "";
+BuyList = "";
+// ============== Prepare Strings =================
+for( i=1; i < totalSymbolCount+1; i++ )
+    {
+        list = VarGetText( "H" + NumToStr(i, 1.0, 0));
+        if(i==1){comma = "";} else{comma = ",";}
+        SymList +=  comma + StrExtract( list , 0);
+        ShrList +=  comma + StrExtract( list, 1);
+        DatList +=  comma +  StrExtract( list, 2);
+        BuyList +=  comma +  StrExtract( list, 3);
+    }
+// Uncomment next line to see the strings
+//Title = "\n\n\n\n\n\n\n\n\n\n\n\n\n" + SymList + "\n" + ShrList + "\n" +
+DatList + "\n" + BuyList;
+
+// ============== Functions for display ===========
+function PrintInCell( string, row, Col,TxtColor )
+	{
+	GfxSetTextColor(TxtColor);
+    GfxDrawText( string, Col * CellWidth, row * CellHeight, ( Col + 1 ) *
+CellWidth, ( row + 1 ) * CellHeight, 0 ); 
+	}
+
+//	Converts a date to DateNum. dat is the date in mm/dd/yyyy format (enclose in quotes)
+function DateToDateNum(dat)
+{
+  	firstbreak	= StrFind(dat, "/");
+  	mont			= StrToNum(StrLeft(StrLeft(dat, firstbreak)   , firstbreak - 1));
+  	fragment		= StrRight(dat, StrLen(dat) - firstbreak);
+  	secbreak		= StrFind(fragment, "/");
+	daa			= StrToNum(StrLeft(StrLeft(fragment, secbreak)   , secbreak - 1));
+  	yeer			= StrToNum(StrRight(fragment, StrLen(fragment) - secbreak));
+  	yerr			= IIf(yeer <= 99 AND yeer > 25, yeer + 1900, IIf(yeer <= 25, yeer +
+2000, yeer));
+  	DatNum		= (yerr - 1900)*10000 + mont*100 + daa;
+  	return DatNum;
+}
+
+function DateToBar(dn)
+{
+    return LastValue(ValueWhen(DateNum()==dn, BarIndex()));
+}
+
+// ===================== Gfx Printing of Title ==============================
+GfxSelectFont( "Courior New", CellHeight/2 );
+GfxSetBkMode(1);
+
+// ===================== Headers for columns ================================
+CellWidth = 400;
+DateSelect = NumToStr(SelectedValue(DateTime()),formatDateTime);
+TopHL = "BEANS Module for " + StrFormat(DateSelect);
+Colorx = colorBlack;
+PrintInCell( TopHL,			0,0,colorx);
+CellWidth = 90;
+PrintInCell( "Fund", 		1,0,colorx);
+PrintInCell( "BuyDate",		1,1,colorx);
+PrintInCell( "BuyPrice",	1,2,colorx);
+PrintInCell( "Shares",		1,3,colorx);
+PrintInCell( "BuyVal",		1,4,colorx);
+PrintInCell( "CurPrice", 	1,5,colorx);
+PrintInCell( "CurValue", 	1,6,colorx);
+PrintInCell( "1d%",	 		1,7,colorx);
+PrintInCell( "1d$Gain",		1,8,colorx);
+PrintInCell( "Tot%Chg", 	1,9,colorx);
+PrintInCell( "21dROC", 		1,10,colorx);
+PrintInCell( "63dROC", 		1,11,colorx);
+
+
+// ================== Core section to print and calculate Title information =============
+// Note: if you rearrange columns, change headers to match
+// -------------- Extract Symbols, Dates, and Shares from string lists ------------------
+kk	=	2;  FTot = 0; GainDol1dTot = 0; ValatBuyTot = 0;
+	for( i = 0; ( sym = StrExtract( SymList, i ) ) != ""; i++ )
+		{// Loop
+		// Set Ticker/Trade Environment.
+		SetForeign(sym);
+
+		Dat			=	StrExtract(DatList,i); 
+		Dat1 			= 	StrToDateTime(Dat);
+		BuyDate		=	DateToDateNum(Dat);
+		BuyBar		=	DatetoBar(BuyDate);
+		BuyPr			=	StrExtract(BuyList,i);
+			if (BuyPr != "") 
+				{	BuyPr2	=	StrToNum(BuyPr); }
+			else
+				{	BuyPr2	=	ValueWhen(DateTime()==Dat1,C,1);	}
+		Shr			=	StrExtract(ShrList,i);
+		ValatBuy		=	BuyPr2 * StrToNum(Shr);
+		ValToday 	= C * StrToNum(Shr);
+		GainPC		=	100 * (C - BuyPr2)/BuyPr2;
+		GainDol1d	=	StrToNum(Shr) * (C - Ref(C,-1) );
+		Ftot 			= Ftot + ValToday;	
+		GainDol1dTot= GainDol1dTot + GainDol1d;
+		ValatBuyTot = ValatBuyTot + ValatBuy;
+		Color1 		=	colorBlack;
+		if (LastValue(ROC(C,1)>=0)) {Color2 = colorGreen;}else {Color2 = colorRed;}
+		if (LastValue(ROC(C,21)>=0)) {Color3 = colorGreen;}else {Color3 = colorRed;}
+		if (LastValue(ROC(C,63)>=0)) {Color4 = colorGreen;}else {Color4 = colorRed;}
+
+
+		Colorx	=	colorBlack;
+		PrintInCell( StrFormat(sym), 								i+kk,0,color1);//Col1:Sym
+		PrintInCell( StrFormat(Dat), 								i+kk,1,color1);//Col2:BuyDate
+		PrintInCell( StrFormat("$"+"%01.2f",BuyPr2), 		i+kk,2,color1);//Col3:BuyPrice
+		PrintInCell( StrFormat("%01.0f",StrToNum(Shr)),		i+kk,3,color1);//Col4:Shares
+		PrintInCell(
+StrFormat("$"+"%01.0f",ValatBuy),			i+kk,4,color1);//Col5:ValatBuy
+		PrintInCell( StrFormat("$"+"%01.2f", C  ), 				i+kk,5,color1);//Col5:Price Today
+		PrintInCell(
+StrFormat("$"+"%01.0f",ValToday),			i+kk,6,color1);//Col6:ValueToday	
+		PrintInCell( StrFormat("%01.2f", ROC(C,1))+"%", 	i+kk,7,color2);//Col6:1dROC
+		PrintInCell( StrFormat("$"+"%01.0f", GainDol1d),
+	i+kk,8,color2);//Col8:1dGain$
+		PrintInCell( StrFormat("%01.1f",
+GainPC)+"%",		i+kk,9,color2);//Col7:Tot%Change
+		PrintInCell( StrFormat("%01.2f", ROC(C,21))+"%",
+		i+kk,10,color3);//Col9:21dROC
+		PrintInCell( StrFormat("%01.2f", ROC(C,63))+"%",
+		i+kk,11,color4);//Col9:63dROC
+
+
+		RestorePriceArrays(); 
+		}// End Loop
+FTot1dROC	=	ROC(Ftot,1);
+TotChg		=	100 * (FTot - ValatBuyTot)/ValatBuyTot;
+FTot21		=	ROC(Ftot,21);
+Ftot63		=	ROC(Ftot,63);
+
+		if (LastValue(Ftot1dROC>=0)) {Color5 = colorGreen;}else {Color5 = colorRed;}
+		if (LastValue(GainDol1dTot>=0)) {Color6 = colorGreen;}else {Color6 =
+colorRed;}
+		if (LastValue(TotChg>=0)) {Color7 = colorGreen;}else {Color7 = colorRed;}
+		if (LastValue(Ftot21>=0)) {Color8 = colorGreen;}else {Color8 = colorRed;}
+		if (LastValue(Ftot63>=0)) {Color9 = colorGreen;}else {Color9 = colorRed;}
+
+
+		PrintInCell(StrFormat("$"+"%01.0f",ValatBuytot),	i+kk+1,4,color1);
+		PrintInCell(StrFormat("%01.0f",Ftot), 					i+kk+1,6,color1);
+		PrintInCell(StrFormat("%01.1f",FTot1dROC)+"%",		i+kk+1,7,color5);
+		PrintInCell(StrFormat("$"+"%01.0f",GainDol1dTot),	i+kk+1,8,color6);
+		PrintInCell(StrFormat("%01.1f",TotChg)+"%",			i+kk+1,9,color7);
+		PrintInCell(StrFormat("%01.1f",Ftot21)+"%",			i+kk+1,10,color8);
+		PrintInCell(StrFormat("%01.1f",Ftot63)+"%",			i+kk+1,11,color9);
+
+
+if (ShowPlot != 0)
+  {Plot(Ftot,"",1,1); }
+
+GraphXSpace = PlotSpace;

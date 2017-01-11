@@ -1,0 +1,25 @@
+ph = TimeFrameGetPrice("H", inDaily, -1 );
+pl = TimeFrameGetPrice("L", inDaily, -1 );
+pc = TimeFrameGetPrice("C", inDaily, -1 );
+
+PP = ( PH + PL + PC )/3;
+
+R1 = 2 * PP - PL;
+R2 = PP + PH - PL;
+R3 = R1 + PH - PL;
+
+S1 = 2 * PP - PH;
+S2 = 2 * PP - PH - PL;
+S3 = S1 - PH - PL;
+
+Plot( C, "Price", colorDefault, styleBar | styleThick );
+
+Plot( PH, "PH", colorGreen, styleNoRescale );
+Plot( PL, "PL", colorViolet, styleNoRescale );
+Plot( PP, "PP", colorBlack, styleNoRescale );
+Plot( R1, "R1", colorBlue, styleDashed | styleNoRescale );
+Plot( R2, "R2", colorLightBlue, styleDashed | styleNoRescale );
+Plot( R3, "R3", colorAqua, styleDashed | styleNoRescale );
+Plot( S1, "S1", colorRed, styleDashed | styleNoRescale );
+Plot( S2, "S2", colorOrange, styleDashed | styleNoRescale );
+Plot( S3, "S3", colorDarkYellow, styleDashed | styleNoRescale ); 

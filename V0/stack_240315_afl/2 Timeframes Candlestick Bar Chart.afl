@@ -1,0 +1,182 @@
+_SECTION_BEGIN("2 Timeframes Candlestick Bar Chart");
+// Specially designed for use in day trading and to save chart space. This chart will displays 2 sets
+// of candlestick bars. One for the time interval set for your chart- for example 1 minute. 
+// The higher timeframe candlestick bars are created by using gfx low-level graphics and will display  
+// according to the parameters you set- for example 5 minutes. 
+
+// I got the idea from David's (dbwyatt_1999) 2 Timeframe chart code which was shared by him on the AmiBroker List. 
+// It uses TimeFrame functions with the PlotOHLC function using styleCloud. So I was thinking it would look 
+// very nice using low-level graphics instead. Little bit more complicated, but I got a few great pointers from Herman!
+
+// If your chart background turns pink- please read the error message in the upper left corner of the chart.
+// Then please observe this AFL code uses ColorBlend(ColorFrom, ColorTo, Factor) which was introduced in version 5.21 beta.
+// The rules are simple- time frames from 1 up to 60 minutes AND Lower time frame must be smaller than the Higher time frame.
+
+Version(5.21); 
+SetChartOptions(2, chartShowDates);
+Title = Name();
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+// PARAMETERS AND SETTINGS:
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+ChartLum 		= Param("Chart Background Color Intensity", 0.40, 0, 1, 0.01);
+TFMinShort		= Param("Short Timeframe (Minutes)", 1, 1, 60, 1);
+TFMinLong 		= Param("Long Timeframe (Minutes)", 5, 1, 60, 1);
+OnSTFBars		= ParamToggle("Short TF Bars", "Off, On", 1);
+OnLTFBars		= ParamToggle("Long TF Bars", "Off, On", 1);
+BarLum1 		= Param("Short TF Bar Color Intensity", 0, 0, 1, 0.01);
+BarLum2 		= Param("Long TF Bar Color Intensity", 0.70, 0, 1, 0.01);
+
+SetChartBkColor(ColorBlend(colorLightBlue, colorWhite, ChartLum));
+// Bar Colors for the Short Timeframe candlestick bars:
+LineColor 		= ColorBlend(colorBlack, colorWhite, BarLum1);
+UpBarColor		= ColorBlend(colorBrightGreen, colorWhite, BarLum1);
+DnBarColor		= ColorBlend(colorRed, colorWhite, BarLum1);
+// Bar Colors For The Long Timeframe candlestick bars:
+TFLineColor 	= ColorBlend(colorBlack, colorWhite, BarLum2 - 0.1);
+TFUpBarColor	= ColorBlend(colorBrightGreen, colorWhite, BarLum2);
+TFDnBarColor	= ColorBlend(colorRed, colorWhite, BarLum2);
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+// FUNCTIONS:
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+function GetVisibleBarCount() 
+{ 
+ lvb = Status("lastvisiblebar"); 
+ fvb = Status("firstvisiblebar"); 
+ return Min( Lvb - fvb, BarCount - fvb ); 
+} 
+
+function GfxConvertBarToPixelX( bar ) 
+{ 
+ lvb = Status("lastvisiblebar"); 
+ fvb = Status("firstvisiblebar"); 
+ pxchartleft = Status("pxchartleft"); 
+ pxchartwidth = Status("pxchartwidth"); 
+ return pxchartleft + bar  * pxchartwidth / ( Lvb - fvb + 1 ); 
+} 
+
+function GfxConvertValueToPixelY( Value ) 
+{ 
+ local Miny, Maxy, pxchartbottom, pxchartheight; 
+ Miny = Status("axisminy"); 
+ Maxy = Status("axismaxy"); 
+ pxchartbottom = Status("pxchartbottom"); 
+ pxchartheight = Status("pxchartheight"); 
+ return pxchartbottom - floor( 0.5 + ( Value - Miny ) * pxchartheight/ ( Maxy -
+Miny ) ); 
+} 
+
+StaticVarKey = Name();
+procedure xStaticVarSet(SName, SValue)
+{
+ global StaticVarKey;
+ if (StaticVarKey != "")
+ 	StaticVarSet(Sname + StaticVarKey, Svalue);
+}
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+// MAIN PROGRAM:
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+if(Interval() != TFMinShort * 60)
+{
+ Title = Title + "\n" + "\n" + "ALERT, ALERT, ALERT!!!" + "\n" + "Set the chart
+time interval to: " + NumToStr(TFMinShort, 1.0, 1) + 
+					" Minute(s) or change the Short Timeframe Parameter setting.";
+ OnSTFBars		= 0;
+ OnLTFBars		= 0;
+ SetChartBkColor(colorRose);
+} 
+
+if(TFMinShort >= TFMinLong)
+{
+ Title = Title + "\n" + "\n" + "ALERT, ALERT, ALERT!!!" + "\n" + "The Long
+Timeframe setting must be longer than the Short Timeframe!";
+ OnSTFBars		= 0;
+ OnLTFBars		= 0;
+ SetChartBkColor(colorRose);
+}
+
+if(OnSTFBars)
+{
+ BarColor		= IIf(Close > Open, UpBarColor, DnBarColor);
+ SetBarFillColor(BarColor);
+ Plot(Close, "", LineColor, styleCandle);
+}
+else
+ Plot(Close, "", colorBlack, styleCandle  | styleNoDraw);
+
+TFSec = in1Minute * TFMinLong; 
+TimeFrameSet(TFSec); 
+TFOpen 			= Open; 
+TFHigh 			= High; 
+TFLow 				= Low; 
+TFClose			= Close; 
+TFBarIndex			= BarIndex();
+TFLastBarIndex	= LastValue(BarIndex());
+TimeFrameRestore(); 
+
+TFOpen 			= TimeFrameExpand(TFOpen, TFSec, expandFirst); 
+TFHigh 			= TimeFrameExpand(TFHigh, TFSec, expandFirst); 
+TFLow 				= TimeFrameExpand(TFLow, TFSec, expandFirst); 
+TFClose			= TimeFrameExpand(TFClose, TFSec, expandFirst);
+TFBarIndex			= TimeFrameExpand(TFBarIndex, TFSec, expandLast + 1);
+TFLastBarIndex	= TimeFrameExpand(TFLastBarIndex, TFSec, expandLast + 1);
+
+CandleTop 			= Max(TFOpen, TFClose); 
+CandleBottom		= Min(TFOpen, TFClose); 
+//============================================================================
+// GFX LOW-LEVEL GRAPHICS SECTION.
+// DRAWING THE LONG TIMEFRAME CANDLESTICK BARS:
+//============================================================================
+if(OnLTFBars)
+{ 
+ GfxSetOverlayMode(1); 
+ AllVisibleBars 	= GetVisibleBarCount(); 
+ fvb				= Status("firstvisiblebar"); 
+ ChartWidth		= GfxConvertBarToPixelX(AllVisibleBars );
+ PixBar 			= ChartWidth / AllVisibleBars;
+ Adjust			= Pixbar * 0.35;
+ TFMinutes 		= TFMinLong / TFMinShort;
+ NewTFBar 			= IIf(TFBarIndex != Ref(TFBarIndex, -1), 1, 0);
+ BarInd			= BarIndex();
+ TFLastBarIndex	= LastValue(TFLastBarIndex);
+
+ // DRAW BAR HISTORY AND THE CURRENT BAR:
+ for(i = 0; i < AllVisibleBars; i++) 
+ {
+  x1 = GfxConvertBarToPixelX(i) * NewTFBar[i + fvb] - Adjust;
+  if(BarInd[i + fvb] < TFLastBarIndex AND NewTFBar[i + fvb] == 1)
+	 {
+		Counter = 0;
+		for(n = i + 1; NewTFBar[n + fvb] == 0 AND n + fvb < BarCount-1; n++)
+			Counter++;
+		x2 = GfxConvertBarToPixelX(i + Counter) * NewTFBar[i + fvb] + 1 + Adjust;
+	 }
+
+  if(TFBarIndex[i + fvb] == TFLastBarIndex)
+ 	x2 = GfxConvertBarToPixelX(i + TFMinutes - 1) * NewTFBar[i + fvb] + 1 +
+Adjust;
+
+   y1 = GfxConvertValueToPixelY(CandleTop[i + fvb]); 
+   y2 = GfxConvertValueToPixelY(CandleBottom[i + fvb]); 
+   yH = GfxConvertValueToPixelY(TFHigh[i + fvb]);
+   yL = GfxConvertValueToPixelY(TFLow[i + fvb]);
+
+   // Candle Body:
+   GfxSelectPen(TFLineColor, 0);
+   FillColor = IIf(TFOpen[i + fvb] < TFClose[i + fvb], TFUpBarColor,
+TFDnBarColor);
+   GfxSelectSolidBrush(FillColor); 
+   if(y1 == y2){y1 = y1 - Adjust; y2 = y2 + Adjust;
+GfxSelectSolidBrush(TFLineColor);}
+   if(x1 > 0){
+   GfxRectangle( x1, y1, x2, y2); 
+   // Candle High and Low:
+   GfxSelectPen(TFLineColor, 2);
+   GfxMoveTo(x2+(x1-x2)/2, y1);
+   GfxLineTo(x2+(x1-x2)/2, yH);
+   GfxMoveTo(x2+(x1-x2)/2, y2);
+   GfxLineTo(x2+(x1-x2)/2, yL);
+   RequestTimedRefresh(0); 
+	}
+ } 
+}
+_SECTION_END();

@@ -1,0 +1,44 @@
+RSI2 = RSI( 2 );
+EMA200 = EMA( C, 200 );
+AvgVol = MA( V, 50 );
+
+SP = Foreign( "$NDX", "C" );
+
+RelPerf52Week = ROC( C / SP, 252 );
+RelPerf26Week = ROC( C / SP, 126 );
+RelPerf13Week = ROC( C / SP, 61 );
+RelPerf4Week = ROC( C, 20 );
+StartYear = Year() != Ref( Year(), -1 );
+SYV = ValueWhen( StartYear, C / SP );
+RelPerfYTD = 100 * ( ( C / SP ) - SYV ) / SYV;
+
+Filter = RSI2 < 5 AND C > EMA200 AND AvgVol > 1000000;
+
+AddColumn( RSI2, "RSI2" );
+AddColumn( EMA200, "EMA200" );
+AddColumn( AvgVol, "AvgVol" );
+AddColumn( RelPerf4Week, "RelPerf4Week" );
+AddColumn( RelPerf13Week, "RelPerf13Week" );
+AddColumn( RelPerf26Week, "RelPerf26Week" );
+AddColumn( RelPerf52Week, "RelPerf52Week" );
+AddColumn( RelPerfYTD , "RelPerfYTD" );
+
+
+// trading rules part
+SetPositionSize( 10, spsPercentOfEquity ); // 10% in single trade
+SetOption("MaxOpenPositions", 10 ); // 10 positions max.
+
+Buy =    Hold( Filter, 40 ) // screening criteria met within last 40 bars
+      AND
+      Close > Ref( HHV( High, 5 ), -1 ); // // stock closes above highs of last 5 bars
+
+  
+Sell = Cross( EMA( C, 6 ), C ); // exit when it drops below 6 period EMA
+
+ApplyStop( stopTypeTrailing, stopModePoint, BuyPrice - Ref( LLV( Low, 3 ), -1 ), True, True ); // 3-bar LLV trailing stop
+
+
+// indicator part
+Plot( C, "Price", colorDefault, styleBar | styleThick );
+Plot( EMA( C, 6 ), "EMA6", colorOrange, styleThick );
+Plot( EMA200, "EMA200", colorBlue, styleThick  );

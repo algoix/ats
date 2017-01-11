@@ -1,0 +1,155 @@
+ PI = 3.1415926;
+SQ2 = sqrt( 2 );
+
+function SuperSmoother( array, periods )
+{
+    a1 = exp( -SQ2 * PI / periods );
+    b1 = 2 * a1 * cos( SQ2 * PI / periods );
+    c2 = b1;
+    c3 = -a1 * a1;
+    c1 = 1 - c2 - c3;
+
+    Filt = Nz( array );
+
+    for ( i = 2; i < BarCount; i++ )
+    {
+         Filt[ i ] = c1 * ( array[ i ] + array[ i - 1 ] ) / 2 +
+                     c2 * Filt[ i - 1 ] +
+                     c3 * Filt[ i - 2];
+    }
+
+    return Filt;
+}
+
+function HighpassFilter( array, periods )
+{
+    alpha1 = ( cos( SQ2 * PI / periods ) + sin ( SQ2 * PI / periods ) - 1 ) /
+             cos( SQ2 * PI / periods );
+
+    HP = Nz( array );
+
+    C1 = ( 1 - alpha1 / 2 ) ^ 2;
+    C2 = 2 * ( 1 - alpha1 );
+    C3 = - ( ( 1 - alpha1 ) ^ 2 );
+
+    for ( i = 2; i < BarCount; i++ )
+    {
+        HP[ i ] =  C1 * ( array[ i ] - 2 * array[i-1] + array[i-2] ) +
+                   C2 * HP[ i - 1] +
+                   C3 * HP[ i - 2];
+    }
+
+    return HP;
+}
+
+ss = SuperSmoother( HighpassFilter( Close, 48 ), 10 );
+
+Length = 20;
+
+
+HighestC = HHV( ss, Length );
+LowestC = LLV( ss, Length );
+
+Stoc = ( ss - LowestC ) / ( HighestC - LowestC );
+
+MESAStochastic = 100 * SuperSmoother( Stoc, 10 );
+////
+BandEdge = Param("BandEdge", 20, 2, 100, 1 );
+
+WhiteNoise = ( Close - Ref( Close, -2 ) ) / 2;
+
+// SuperSmoother filter
+// note: in AFL angles are in radians
+pi = 3.1415926;
+r2 = sqrt( 2 );
+a1 = exp( - r2 * pi / BandEdge );
+b1 = 2 * a1 * cos( r2 * pi / BandEdge );
+c2 = b1;
+c3 = - a1 * a1;
+c1 = 1 - c2 - c3;
+
+pk = 0.0000001;
+universal = 0;
+
+input = Nz( WhiteNoise + Ref( WhiteNoise, -1 ) ) / 2;
+Filt = input;
+
+// IIR+AGC loop
+for( i = 2; i < BarCount; i++ )
+{
+Filt[ i ] = c1 * input[ i ]  +
+             c2 * Filt[ i - 1 ] +
+             c3 * Filt[ i - 2 ];
+
+pk = 0.991 * pk;
+            
+af = abs( Filt[ i ] );
+
+if( af > pk ) pk = af;
+
+universal[ i ] = Filt[ i ] / pk;
+}
+////
+
+momperiod =10;
+dvgperiod1 =5;
+dvgperiod2 = 8;
+dvgperiod3 =13;
+ATRperiod =20;
+entrynumber =1;
+maxdivergences = 3;
+
+
+mom = StochK( momperiod, 1 );
+
+priceslope1 = LinRegSlope(Close,dvgperiod1);
+momslope1 = LinRegSlope(mom,dvgperiod1);
+dvgbuy1 = priceslope1 > 0 AND momslope1 < 0;
+dvgsell1 = priceslope1 < 0 AND momslope1 > 0;
+
+priceslope2 = LinRegSlope(Close,dvgperiod2);
+momslope2 = LinRegSlope(mom,dvgperiod2);
+dvgbuy2 = priceslope2 > 0 AND momslope2 < 0;
+dvgsell2 = priceslope2 < 0 AND momslope2 > 0;
+
+priceslope3 = LinRegSlope(Close,dvgperiod3);
+momslope3 = LinRegSlope(mom,dvgperiod3);
+dvgbuy3 =  priceslope3 > 0 AND momslope3 < 0;
+dvgsell3 = priceslope3 < 0 AND momslope3 > 0;
+
+nbuys = dvgbuy1 + dvgbuy2 + dvgbuy3;
+nsells = dvgsell1 + dvgsell2 + dvgsell3;
+
+npriceslopeup = ( priceslope1 >= 0 ) + ( priceslope2 >= 0 ) + ( priceslope3 >= 0 );
+npriceslopedown = ( priceslope1 < 0 ) + ( priceslope2 < 0 ) + ( priceslope3 < 0 );;
+
+nmomslopeup = ( momslope1 >= 0 ) + ( momslope2 >= 0 ) + ( momslope3 >= 0 );
+nmomslopedown = ( momslope1 < 0 ) + ( momslope2 < 0 ) + ( momslope3 < 0 );
+
+Exit = ( npriceslopeup == maxdivergences AND nmomslopeup == maxdivergences) OR
+       ( npriceslopedown == maxdivergences AND nmomslopedown == maxdivergences);
+      
+
+
+Plot(C, "Close", colorRed, styleThick );
+PlotGrid( 20, colorBlue );
+PlotGrid( 80, colorBlue );
+
+Buy1 = Cross( 20, MESAStochastic );
+Sell1 = Cross( MESAStochastic, 80 );
+Buy2=Cross(LLV(universal,15)*1.0001,universal);
+Sell2=Cross(universal,HHV(universal,15)*0.9999);
+B3= nbuys >= entrynumber;
+S3= nsells >= entrynumber;
+
+watchlistUS=InWatchList(4);
+Buysig=Buy1+Buy2+B3;
+Sellsig=Sell1+Sell2+S3+Exit;
+
+Filter=(Buysig OR Sellsig) AND watchlistUS;
+
+AddColumn(Buysig,"Stocks-Buy",1.2);
+AddColumn(Sellsig,"Stocks-Sell",1.2);
+
+PlotShapes( Buysig * shapeUpArrow, colorGreen, 0, 20, 8 );
+PlotShapes( Sellsig * shapeDownArrow, colorRed, 0, 80, 8 ); 

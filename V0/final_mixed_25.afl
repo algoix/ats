@@ -1,0 +1,331 @@
+_SECTION_BEGIN("Combined strategy button trading"); 
+EnableTextOutput(False);
+SetChartOptions(0, chartShowDates); 
+RequestTimedRefresh(1);
+Filename = StrLeft(_DEFAULT_NAME(),StrLen(_DEFAULT_NAME())-2);
+_N(Title = Filename + StrFormat(" - {{DATE}} \nOpen %g, Hi %g, Lo %g, Close %g (%.1f%%) Vol " + " {{VALUES}}", O, H, L, C, SelectedValue( ROC( C, 1 )) ));
+ 
+VarPfx = "Btn1"; // some var that reflects the trading file
+
+
+VarPfx = "Btn1"; // some var that reflects the trading file
+ 
+// ####  Parameters   ########################################################################################################
+AutoTrade   = ParamToggle("Auto trade", "ON|OFF");
+Contracts   = Param("Num contracts", 25, 25, 1000, 5);
+BuyOrder    = ParamTrigger("Place Buy order","BUY");
+SellOrder = ParamTrigger("Place Sell order","SELL");
+CloseAll  = ParamTrigger("Close all positions","CLOSE ALL");
+CancelAll = ParamTrigger("Cancel all pending orders","CANCELL ALL");
+Reset       = ParamTrigger("Reset", "RESET"); 
+ 
+ 
+// #### STRATEGY ################################################################################
+ 
+//BID-ASK
+spread=(GetRTData("Ask")-GetRTData("Bid"));
+FQ=spread;
+BP=GetRTData("Bid")+FQ*0.25;
+SP=GetRTData("Ask")-FQ*0.25;
+flag=abs(MA((BP-C),15));
+sflag=abs(MA((SP-C),15));
+//STRATEGY
+
+P=Ref(C,-15);
+Hp=30;
+Longbar =15;
+shortbar=5;
+N=15;
+Lp=1;
+Index="NDX-NASDAQ-IND-USD";
+r=ln(C/P);
+z=(r-MA(r,5))/StdErr(r,5);
+pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+s1=atan(z)*RTD;
+s2=atan(C-O)*RTD;
+aa = LinRegIntercept(P,Hp); 
+bb = LinRegSlope(P,Hp); 
+s3=C-(aa + bb *Ref(C,-1)); 
+CHL = Max(C,15 )-Min(C,15);
+OHL = Max(O,15)-Min (O,15);
+s4=CHL/OHL;
+m=(H+C+O+L)/4;
+std=(m-MA(m,10))/StDev(m,10);
+s5=atan(std)*RTD;
+MAH = MA(Max(H,Longbar ),shortbar);
+MAL = MA(Min(L,Longbar ),shortbar);
+spread = MAH - MAL;
+s6=(spread-MA(spread,shortbar))/StDev(spread,shortbar);
+CS = LinRegSlope(C, N);
+CI=LinRegIntercept(C, N);
+y=CI+CS*Ref(C,-1);
+s7=y-C;
+CS = LinRegSlope(m, 30);
+CI=LinRegIntercept(m, 30);
+y=m-(CI+CS*m);
+s8=(y-MA(y,30))/StdErr(y,30);
+P=Foreign(Index,"C",Lp);
+s9=Correlation(P,C,Hp);
+function TTF( periods )
+{
+	BuyPower = HHV( High, periods ) - Ref( LLV( Low, periods ), -periods );
+	SellPower = Ref( HHV( High, periods ), -periods ) - LLV( Low, periods );
+	return 100 * (BuyPower - SellPower) / (0.5 * (BuyPower + SellPower));
+}
+s10= TTF(15);
+bu1=Cross(LLV(s1,30)*0.99,s1);
+bu2=Cross(LLV(s2,30)*0.99,s2);
+bu3=Cross(LLV(s3,30)*0.99,s3);
+bu4=Cross(0.9985,s4);
+bu5=Cross(s5,-62);
+bu6=Cross(LLV(s6,30)*0.99,s6);
+bu7=Cross(LLV(s7,30)*0.99,s7) ;
+bu8=Cross(LLV(s8,30)*0.99,s8); 
+bu9=Cross(LLV(s9,30)*0.99,s9);
+bu10=Cross(LLV(s10,30)*0.99,s10);
+
+se1=Cross(s1,HHV(s1,30)*0.99) ;
+se2=Cross(s2,HHV(s2,30)*0.99);
+se3=Cross(s3,HHV(s3,30)*0.99);
+se4=Cross(s4,1.0015);
+se5=Cross(62,s5);
+se6=Cross(s6,HHV(s6,30)*0.99);
+se7=Cross(s7,HHV(s7,30)*0.99);
+se8=Cross(s8,HHV(s8,30)*0.99);
+se9=Cross(s9,HHV(s9,30)*0.99);
+se10=Cross(s10,HHV(s10,30)*0.99);
+bv1=ValueWhen(bu1,C,1);
+bv2=ValueWhen(bu2,C,1);
+bv3=ValueWhen(bu3,C,1);
+bv4=ValueWhen(bu4,C,1);
+bv5=ValueWhen(bu5,C,1);
+bv6=ValueWhen(bu6,C,1);
+bv7=ValueWhen(bu7,C,1);
+bv8=ValueWhen(bu8,C,1);
+bv9=ValueWhen(bu9,C,1);
+bv10=ValueWhen(bu10,C,1);
+sv1=ValueWhen(se1,C,1);
+sv2=ValueWhen(se2,C,1);
+sv3=ValueWhen(se3,C,1);
+sv4=ValueWhen(se4,C,1);
+sv5=ValueWhen(se5,C,1);
+sv6=ValueWhen(se6,C,1);
+sv7=ValueWhen(se7,C,1);
+sv8=ValueWhen(se8,C,1);
+sv9=ValueWhen(se9,C,1);
+sv10=ValueWhen(se10,C,1);
+
+printf("\nBuy Points"+bv1+"\t "+bv2+"\t "+bv3+"\t "+bv4+"\t "+bv5+"\t "+bv6+"\t "+bv7+"\t "+bv8+"\t "+bv9+"\t "+bv10);
+printf("\nMy BID"+"\t"+BP+"\n**C-BP**\t"+flag);
+printf("\nSell Points"+sv1+"\t "+sv2+"\t "+sv3+"\t "+sv4+"\t "+sv5+"\t "+sv6+"\t "+sv7+"\t "+sv8+"\t "+sv9+"\t "+sv10);
+printf("\nMy SELL price"+"\t"+SP+"\n**C-SP**\t"+sflag +"\n");
+
+Buy=(bu1 OR bu2 OR bu3 OR bu5 OR bu6 OR bu7 OR bu8 OR bu9 OR bu10) AND (Ref(C,-5)-C)>flag;// AND (abs(bv1-BP)<flag OR abs(bv2-BP)<flag OR (bv3-BP)<flag OR (bv4-BP)<flag OR (bv5-BP)<flag OR (bv6-BP)<flag OR (bv7-BP)<flag OR (bv8-BP)<flag OR (bv9-BP)<flag OR (bv10-BP)<flag);
+Sell=(se1 OR se2 OR se3 OR se5 OR se6 OR se7 OR se8 OR se9 OR se10);//  AND ((sv1+sflag)>SP OR (sv2+sflag)>SP OR (sv3+sflag)>SP OR (sv4+sflag)>SP OR (sv5+sflag)>SP OR (sv6+sflag)>SP OR (sv7+sflag)>SP OR (sv8+sflag)>SP OR (sv9+sflag)>SP OR (sv10+sflag)>SP);
+Buy=ExRem(Buy,Sell);
+//Sell=ExRem(Sell,Buy);
+//AND (Ref(C,-5)+flag)<BP ;// AND abs(C-O)<abs(Ref((C-0),-1))
+//AND SP>(Ref(C,-5)+sflag)  AND abs(C-O)>abs(Ref((C-0),-1))
+//Buy=(bu1 OR bu2 OR bu3 OR bu5 OR bu6 OR bu7 OR bu8 OR bu9 OR bu10) AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1));
+//Sell=(se1 OR se2 OR se3 OR se4 OR se5 OR se6 OR se7 OR se8 OR se9 OR se10) AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1));
+ 
+// ####  Plot indicators and shapes  ##########################################################################################
+Plot(C, "Combined Strategy ## S1 to S10", colorWhite, 4);
+PlotShapes( Buy* shapeUpArrow , colorGreen, 0);
+//PlotShapes( Sell* shapeDownArrow , colorRed, 0);  
+// ####  Static vars reset   ##################################################################################################
+if( reset OR Nz(StaticVarGet(varPfx  + "Init") == False) )
+{
+    StaticVarSetText(varPfx  + "orderID", "");
+    StaticVarSetText(VarPfx + "lastTrade", ""); 
+    StaticVarSet(VarPfx + "numPositions", 0);
+    _TRACE("# init, " + NumToStr(StaticVarGet(varPfx  + "num"), 1.0));
+}
+ 
+ 
+ 
+// ####  Trading section ########################################################################################################
+ 
+if(autotrade) 
+{
+    ibc = GetTradingInterface("IB");
+    ConnectedStatus = ibc.IsConnected();    // get the connection status, 2 is OK
+    
+    averageprice=0;
+position=0;
+totalposition=0;
+execinfo="";
+positioninfo="";
+pendinginfo="";
+OrderID = StaticVarGetText( "OrderID" );
+OrderStatus = ibc.GetStatus( OrderID, True );
+LastTWSMsg = ibc.getLastError( OrderID );
+Title = "Last TWS Error Msg: " + LastTWSMsg + "\n" ;
+
+
+ 
+    // this is where the trade processing is done
+    if( ConnectedStatus == 2 OR ConnectedStatus == 3) // connected to TWS with no error messages
+    {
+        OrderID = StaticVarGetText(VarPfx + "OrderID");
+        OrderStatus = ibc.GetStatus( OrderID, True );
+        oldNumPositions = StaticVarGet(VarPfx + "numPositions");
+        numPositions  = ibc.GetPositionSize(Name()); 
+        StaticVarSet(VarPfx + "numPositions", numPositions  );
+        LastTrade = StaticVarGetText(VarPfx + "lastTrade"); 
+        _TRACE("# buy, positions = " + NumToStr(numPositions, 1.0) + ", last trade = " + LastTrade + ", OID = " + OrderID);
+ 
+        if(  ( LastTrade == "Buy" AND numPositions  > oldNumPositions )  OR
+             ( LastTrade == "Sell" AND numPositions  < oldNumPositions )     OR
+             ( LastTrade == "Close" AND numPositions  == 0)                     )
+        {
+            
+            OrderID = StaticVarSetText(VarPfx + OrderID, "");
+        }
+        else if (OrderStatus == "Cancelled")
+            OrderID = StaticVarSetText(VarPfx + OrderID, "");
+             
+        if( BuyOrder )
+       {
+            
+            OrderID = ibc.ModifyOrder( OrderID, Name(), "Buy",Contracts, "LMT", BP, 0, "Day",True );
+            StaticVarSetText(VarPfx + "OrderID", OrderID);
+            StaticVarSetText(VarPfx + "lastTrade", "Buy"); 
+            _TRACE("# buy, positions = " + NumToStr(numPositions, 1.0));
+       }
+ 
+        if( SellOrder )
+        {
+            
+            OrderID = ibc.ModifyOrder( OrderID, Name(), "Sell",Contracts, "LMT", SP,0, "Day", True );
+            StaticVarSetText(VarPfx + "OrderID", OrderID);
+            StaticVarSetText(VarPfx + "lastTrade", "Sell"); 
+            _TRACE("# sell, positions = " + NumToStr(numPositions, 1.0));
+        }
+        
+        if( LastValue( Buy )) 
+		{ 
+			if(numPositions==0) 	
+			{
+			
+			OrderID = ibc.ModifyOrder( OrderID, Name(), "Buy", 25, "LMT", BP, 0, "Day",True );
+			StaticVarSetText(VarPfx + "OrderID", OrderID); 
+			StaticVarSetText(VarPfx + "lastTrade", "Buy"); 
+			_TRACE("*** Auto Buy, positions = " + NumToStr(numPositions, 1.0));
+			}
+			if(numPositions>0 AND numPositions<225 AND BP<(averageprice-0.06)) 	
+			{
+			
+			OrderID = ibc.ModifyOrder( OrderID, Name(), "Buy", 25, "LMT", BP, 0, "Day",True );
+			StaticVarSetText(VarPfx + "OrderID", OrderID); 
+			StaticVarSetText(VarPfx + "lastTrade", "Buy"); 
+			_TRACE("*** Auto Buy, positions = " + NumToStr(numPositions, 1.0));
+			}
+         }
+          
+		if(numPositions>0 AND (SP>(averageprice+0.1)))
+			{
+			
+			OrderID = ibc.ModifyOrder( OrderID, Name(), "Sell",25, "LMT",(averageprice+0.1),0, "Day", True );
+			StaticVarSetText(VarPfx + "OrderID", OrderID); 
+			StaticVarSetText(VarPfx + "lastTrade", "Sell"); 
+			_TRACE("*** Auto Sell, positions = " + NumToStr(numPositions, 1.0));
+            }
+		 
+     
+		if(numPositions>200)
+		{
+			ibc.CancelAllPendingOrders( );
+		} 
+        
+        else if( CloseAll  )
+        {
+            
+            ibc.CancelAllPendingOrders( );
+            ibc.CloseAllOpenPositions();
+            StaticVarSetText(VarPfx + "lastTrade", "Close"); 
+            _TRACE("# close, positions = " + NumToStr(numPositions, 1.0));
+        }
+        else if( CancelAll )
+        {
+            
+            ibc.CancelAllPendingOrders( );
+            _TRACE("# cancel, ");
+        }
+        LastTWSMsg = ibc.getLastError( 0 );
+ 
+    // the following will display in the interprettion window
+        printf("Order type: " + LastTrade +
+        "\nOrder Status: " + OrderStatus + 
+        "\nOrder ID: " + StaticVarGetText(VarPfx + "OrderID") + 
+        "\nNum positions: " + NumToStr(ibc.GetPositionSize( Name() ),1.0,False) +
+        "\nAverage Price"+averageprice +
+        "\nLast TWS Msg: " + LastTWSMsg );
+        ///
+        execlist = ibc.GetExecList(0,""); 
+		for( i = 0; ( OID = StrExtract( execlist, i ) ) != ""; i++ ) 
+		{ 
+		if(ibc.GetExecInfo( OID, "Symbol" )==Name())
+		{
+		execinfo = execinfo + "\n"+OID + "\t"+ibc.GetExecInfo( OID, "Symbol" ) + "\t"+ ibc.GetExecInfo( OID, "Filled" ) + "\t" + ibc.GetExecInfo( OID, "Avg. price" ) + "\n"; 
+		}
+       _TRACE( execinfo );
+  		}
+//This code to get the portfolio 
+openpos = ibc.GetPositionList(); 
+for( i = 0; ( symbol = StrExtract( openpos, i ) ) != ""; i++ ) 
+ { 
+   
+   
+    if(symbol==Name())
+   {
+   positioninfo=positioninfo+"Position " + i + "\tSymbol: " + symbol + "\tSize: " + ibc.GetPositionSize( symbol ) + "\n" + "\tAvg Price: " + ibc.GetPositionInfo(symbol, "Avg. cost") +"\n" ; 
+   position  = ibc.GetPositionSize(symbol); 
+   aprice = ibc.GetPositionInfo(symbol, "Avg. cost");
+      averageprice=aprice; 
+   totalposition=totalposition+position;
+   } 
+
+ }
+ 
+symbols = ibc.GetPendingList( 0, "Pending" ); //returns comma separated list of pending order IDs
+symbols = ibc.GetPendingList( 1, "Pending" ); // returns comma separated list of SYMBOLS that have pending orders
+symbols = ibc.GetPendingList( 0, "Error" );//returns list of orderids that have errors
+symbols = ibc.GetPendingList( 0, "Cancelled" );//returns cancelled orderids (please keep in mind that cancelled order are automatically removed from  the list after few seconds)
+symbols = ibc.GetPendingList( 0, "" ); // - returns list of all orderIDs present in the "pending list" (may be pending/error/cancelled/partially filled/submitted, etc)
+
+for( i = 0; ( symbol = StrExtract( symbols, i ) ) != ""; i++ ) 
+ { 
+        if(symbol==Name())
+    {
+     pendinginfo=pendinginfo+"Position " + i + "\tSymbol: " + symbol + "\tSize: " + ibc.GetPositionSize( symbol ) + "\n" + "\tAvg Price: " + ibc.GetPositionInfo(symbol, "Avg. cost") +"\n" ;  
+    }
+ } 
+ 
+//**// 
+        
+          /*printf("\n"+"Size: "+ totalposition+"\tAvg Price: " +averageprice+"\n\n");
+  printf("\tTRADE INFO" +execinfo+"\n");
+  printf("\tPENDING INFO" +pendinginfo+"\n");
+  printf("\tPENDING INFO" +positioninfo+"\n"); */
+        
+     }
+    else // ConnectedStatus == 0 OR ConnectedStatus == 1, lost connection
+    {
+        // handle commection errors 
+        if(ConnectedStatus == 0) stat = "Not Connected."; else if(ConnectedStatus == 1) stat = "Lost Connection.";
+        SetChartBkColor( colorYellow);      
+    // the following will display in the interprettion window
+        printf("\nTWS Status: " + stat + "\n"); 
+    }
+} // end auto trading loop
+else
+{
+    SetChartBkColor( colorTan);
+    // the following will display in the interprettion window
+    printf("\n1. Autotrading is turned off\n" + "2. TWS not started." );
+}
+ 
+_SECTION_END();

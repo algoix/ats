@@ -1,0 +1,52 @@
+Index="AMCC";
+P=Foreign(index,"C",1);
+sp=C-(LinRegIntercept(P,15)+LinRegSlope(P,15));
+Z=(sp-MA(sp,30))/Stderr(sp,30);
+Buy = Cross(Z,-1.96*Z );// tested on specific stock of 1 minute date
+Sell = Cross(Z,1.96*Z);// tested on specific stock of 1 minute date
+Short = Sell;
+Cover = Buy;
+Buy=ExRem(Buy,Sell);
+Sell=ExRem(Sell,Buy);
+Filter=Buy OR Sell;
+Plot(Z,"Spread",10,4);
+PlotShapes( Buy* shapeUpArrow , colorGreen, 0); 
+PlotShapes( Sell* shapeDownArrow , colorBlue, 0);
+if( SelectedValue(Buy)==1) Say("Buy at"+C);
+if( SelectedValue(Sell)==1) Say("Sell at"+C);
+
+
+
+if( LastValue( Buy ) ) 
+ { 
+ibc = GetTradingInterface("IB"); 
+   // check if we are connected OK 
+   if( ibc.IsConnected() ) 
+   { 
+      		if( ibc.GetPositionSize(Name() )<=5 AND ibc.GetPositionSize( index )>0 ) 
+      {
+         // transmit order 
+         ibc.PlaceOrder( Name(), "Buy", 100, "MKT", 0, 0, "Day", True ); 
+         ibc.PlaceOrder( index, "Sell", 100, "MKT", 0, 0, "Day", True ); 
+                 }         
+     
+      
+    } 
+ }
+ 
+ if( LastValue( Sell ) ) 
+ { 
+ ibc = GetTradingInterface("IB"); 
+   // check if we are connected OK 
+   if( ibc.IsConnected() ) 
+   { 
+      // check if we do not have already open position on this stock 
+        if( ibc.GetPositionSize( Name() )>0 AND ibc.GetPositionSize(index)<=5)
+      {
+         // transmit order 
+         ibc.PlaceOrder(Name(), "Sell",100, "MKT",0, 0, "Day", True ); 
+         ibc.PlaceOrder( index, "Buy", 100, "MKT", 0, 0, "Day", True );
+         }
+         
+   } 
+ }

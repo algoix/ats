@@ -1,0 +1,162 @@
+SetBarsRequired( 400, 0 );
+bi = BarIndex();
+AvgPrice = ( O + H + L + C ) / 4;  
+ND = Day() != Ref(Day(), -1);
+newPeriod = Day() != Ref( Day(), -1 );
+day_open_time = 1 + BarsSince( Day() != Ref(Day(), -1));
+bi = BarIndex();        // Just shorthand
+StartBar = StrToNum("2");   //1st bar == 0. Set to 1 so Ref(xxx, -1) doesn't give an error
+EndBar = BarCount -1;
+ExtraBarsRequired = 0;
+
+O1 = Ref(O,-1);O2 = Ref(O,-2);
+	H1 = Ref(H,-1);H2 = Ref(H,-2);
+	L1 = Ref(L,-1);L2 = Ref(L,-2);
+	C1 = Ref(C,-1);C2 = Ref(C,-2);
+P=Foreign("$NDX","C");
+myrsi=RSI(14);// 80 sell , 20 buy
+myroc=ROC(C,12);
+
+Cond4 = (( Cross( PDI(), MDI() ) ) AND ( PDI()> MDI() )) OR (( Cross( PDI(), ADX( 14 ) ) ) AND ( PDI()> ADX( 14 ))) ; 
+Cond6=  CCIa( Close, 14 ) > 50;
+Cond7= ((C>O) AND ((C-O)/(.001+H-L)>.6)) OR  (C>O AND H==C AND O==L) OR  (C>O AND C==H)OR  (C>O AND O==L)  OR ((O1>C1) AND
+(C>O) AND (C>= O1) AND (C1>= O) AND ((C-O)>(O1-C1))) OR GapUp()OR ((O1>C1) AND (C>O) AND (C<= O1) AND (C1<= O) AND ((C-O)<(O1-C1)))
+OR ((O2>C2) AND (C1>O1) AND (C1<= O2) AND (C2<= O1) AND ((C1-O1)<(O2-C2)) AND (C>O) AND (C>C1) AND (O>O1))OR  ((C1<O1) AND
+(((O1+C1)/2)<C) AND (O<C) AND (O<C1) AND (C<O1) AND ((C-O)/(.001+(H-L))>0.6)) ;
+
+ZZPercent=0.6;
+ZZ=Zig(C,ZZPercent);
+ZZbottom=(ZZ<Ref(ZZ,-1)) AND (ZZ<Ref(ZZ,1));
+ZZtop=(ZZ>Ref(ZZ,-1)) AND (ZZ>Ref(ZZ,1));
+ExitZscorelookback=5;
+ZScore=(C-MA(C,ExitZscorelookback))/StDev(C,ExitZscorelookback);
+
+percdiff = 0.6; /* peak detection threshold */
+PK= Peak( H, percdiff, 1 ) == High;
+TR= Trough( L, percdiff, 1 ) == Low;
+
+xTr1 = ValueWhen( Tr, L, 1 );
+xTr2 = ValueWhen( Tr, L, 2 );
+xTr3 = ValueWhen( Tr, L, 3 );
+xTr4 = ValueWhen( Tr, L, 4 );
+xPK1=ValueWhen(PK,H,1);
+xPK2=ValueWhen(PK,H,2);
+xPK3=ValueWhen(PK,H,3);
+xPK4=ValueWhen(PK,H,4);
+valB=valuewhen(ZZbottom,C,1);
+valT=valuewhen(ZZtop,C,1);
+val=valuewhen(ZZbottom,C,1);
+downup=IIf(xTr1>xTr2 and C>xTr1 AND xTr2<valB,1,0);
+topdown=iif(xPK1<xPK2 and C<xPK1 AND xPK2>valT,1,0);
+//
+
+function Support(p)
+{
+sup = LLV(low, p);
+sup[0] = low[0];
+p = min(p,BarCount); 
+for (i = 1; i < p; i++)
+{
+if(low[i] < sup[i-1]) sup[i] = low[i];
+else sup[i] = sup[i-1];
+}
+return sup;
+}
+
+function Resistance(p)
+{
+res = HHV(high, p);
+res[0] = high[0];
+p = min(p,BarCount); 
+for (i = 1; i < p; i++)
+{
+if(high[i] > res[i-1]) res[i] = high[i];
+else res[i] = res[i-1];
+}
+return res;
+}
+
+function OptimizeNot(a1, a2, a3, a4, a5)
+{
+return a2;
+}
+
+/*==============================================================================
+Entry and Exit Rules
+==============================================================================*/
+fast = 5;
+slow = 15;
+FastRes = Resistance(fast);
+FastSup = Support(fast);
+SlowRes = Resistance(slow);
+SlowSup = Support(slow);
+heat = 0.05;
+
+///
+periods =15;
+Percent = 5;
+DaysBack = 0; 
+RABars = 0; //initialize
+TotalBars = cum(1); //how many bars in database
+FinalBar = lastvalue(TotalBars);//number value of last bar
+EndDay = FinalBar - DaysBack;//for other than 0 DaysBack
+StartDay = EndDay - periods+1;//starting point for line
+Master1 = iif(TotalBars >= StartDay and TotalBars <= EndDay,1,0);//defined period
+RABars = iif(Master1,ref(RABars,-1)+1,0); // daily counter in defined period
+RABarKntr = iif(Master1,sum(RABars,periods),0); //Sum of daily counts
+
+/*  Regression Analysis Computations  */
+TempMeanX = iif(RABarKntr == periods,sum(RABarKntr,periods),0);  // Sum of individual day counters
+MeanX1 = hhv(TempMeanX,TotalBars)/periods;  //  Final number divided by number of days
+MeanX = lastvalue(MeanX1); 
+TempMeanY =  iif(RABarKntr == periods, sum(c,periods),0);
+MeanY1 = hhv(TempMeanY,TotalBars)/periods ;  //  Final sum  divided by number of days
+MeanY = lastvalue(MeanY1);  
+Slope1 = iif(TotalBars == EndDay,linregslope(c,periods),0);
+Slope2 = iif(hhv(Slope1,FinalBar)>=0,hhv(slope1,FinalBar),llv(Slope1,FinalBar));
+slope = lastvalue(Slope2);
+Intercept = MeanY -Slope * MeanX;
+
+/*  Linear Regression Line = Intercept plus the Slope times RABarKntr  */
+LRLine = Intercept + Slope * RABarKntr; 
+///
+
+
+
+//bottomline=C<xTr2*1.02 AND C<val*1.03 AND xTr1<xTr2*1.01 AND downup AND ((Cond1 AND Cond2 AND Cond3 AND Cond5) OR Cross(OBV(),MA(OBV(),60)));//bottom line lower than support line considerable when prices breaks support line
+supportline=C>xPK1*0.985 AND C>xPK2*0.985 AND C>valT*0.98 AND xPK1>xPK2*0.99 AND C<LastValue(LRLine) AND C>SlowSup AND LinRegSlope(MA(C,5),30)*180/(4*atan(1))>-0.6 AND   !GapDown() and ((Cond4 AND Cond6) or Cond7); 
+myfilter=supportline AND C>(xTr1+val)*1.01/2 ;
+
+//Sellsi= (myrsi<80 AND (Cross(MA(OBV(),30),MA(OBV(),5)) AND myrsi>50) And myroc>0.5 AND myroc<1) AND Cond8 AND Cond9 AND Cond10 AND Cond11 AND Cond12 and C<(ValueWhen(bottomline,C,1);
+listnum = 11; // we use watchlist 10 for storing results
+
+//erase the watchlist when we process very first symbol
+if ( Status( "stocknum" ) == 0 )
+{
+    // retrieve watchlist members
+    oldlist = CategoryGetSymbols( categoryWatchlist, listnum );
+
+    // iterate through the list and remove tickers
+    for ( i = 0; ( sym = StrExtract( oldlist, i ) ) != ""; i++ )
+    {
+        CategoryRemoveSymbol( sym, categoryWatchlist, listnum );
+    }
+}
+//watchlist 14 for sell, holding list should be appended here 
+//PART A to capture lower buy line and trend
+watchlistUS=InWatchList(4);
+Filter = watchlistUS AND myfilter; //ValueWhen(bottomline,C,1)>ValueWhen(bottomline,C,2) 
+
+AddColumn(C,"Close",1.2,ColorGreen);
+//AddTextColumn(FullName(),"name",200);
+//AddColumn(supportline,"Support");
+//AddColumn(ValueWhen(supportline,C,1),"SupportLine",1.2);
+//AddColumn((xTr1+val)/2,"BottomPoint",1.2);
+//AddColumn((xPK1+valT)/2,"PeakPoint",1.2);
+
+if ( LastValue( Cum( Filter AND Status( "barinrange" ) ) )  )
+    CategoryAddSymbol( "", categoryWatchlist, listnum );
+
+
+
+

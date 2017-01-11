@@ -1,0 +1,180 @@
+
+//toggle switch for fast refresh
+FastRefresh=ParamToggle("FastRefresh","Enabled",0);
+
+//points reversal
+Reverse = Param ("Points Reversal",07,1,50,1,0);
+
+//files where the swing chart is temporarely store, you may change the path and file name
+fh=fopen("C:\\Program Files\\Amibroker\\tempswing.txt","r");
+
+//Minutes of current time used to trigger time-driven refresh
+Minutes=round(frac(Now(4)/1000)*100);
+
+//Minutes of time when last refresh occurred
+Lastrefresh=StaticVarGet("lastrefresh");
+
+// This code under IF is executed only when the swing chart needs to be recalculated
+if (FastRefresh OR fh==0 OR reverse!=StaticVarGet("reverse") OR Minutes!=Lastrefresh)
+	{
+		StaticVarSet("lastrefresh", Minutes);
+		StaticVarSet("reverse", Reverse);
+		fclose(fh);
+	    
+		j 			= 0;
+		Swing[j] 	= C[0];
+		dt[0]		= LastValue(Highest(ValueWhen(BarIndex()==0,DateTime())));
+		dw[0]		= LastValue(Highest(ValueWhen(BarIndex()==0,DayOfWeek())));
+		br[0]		=0;
+
+		down 		= 1;    
+		up 			= 0;
+		swap 		= 0;
+
+    		
+    
+
+	for( i = 1; i < BarCount; i++ )
+		{
+ 		if( down AND (High[i] - Swing[j]) <= Reverse AND (Low[i] < Swing[j])) 
+ 				{
+				Swing[j] = Low[i];
+				dt[j]		= LastValue(Highest(ValueWhen(BarIndex()==i,DateTime())));
+				dw[j]		= LastValue(Highest(ValueWhen(BarIndex()==i,DayOfWeek())));
+				br[j]		=i;	
+				}
+ 			
+ 		else if( down AND (High[i] - Swing[j]) > Reverse) 
+  			{
+   			j++;
+   			Swing[j] 	= High[i];
+			dt[j]		= LastValue(Highest(ValueWhen(BarIndex()==i,DateTime())));	
+			dw[j]		= LastValue(Highest(ValueWhen(BarIndex()==i,DayOfWeek())));
+			br[j]		=i;
+			swap = 1;
+ 			}
+ 		
+ 		if( up AND (Swing[j]- Low[i]) <= Reverse AND (High[i] > Swing[j]) )        
+	
+			{
+			Swing[j] = High[i];
+			dt[j]		= LastValue(Highest(ValueWhen(BarIndex()==i,DateTime())));	
+			dw[j]		= LastValue(Highest(ValueWhen(BarIndex()==i,DayOfWeek())));
+			br[j]		=i;
+			}
+ 		
+ 		else if(  up AND (Swing[j]- Low[i]) > Reverse)   
+  			{
+   			j++;
+   			Swing[j] = Low[i];
+			dt[j]		= LastValue(Highest(ValueWhen(BarIndex()==i,DateTime())));	
+			dw[j]		= LastValue(Highest(ValueWhen(BarIndex()==i,DayOfWeek())));
+			br[j]		=i;
+   			swap 		=1;
+			}
+ 		
+		if( swap )
+ 			{
+  			swap = 0;
+  			if( up )
+  				{
+   				up = 0;
+   				down = 1;
+  				}
+  			else
+  				{
+   				up = 1;
+   				down = 0;
+  				}
+ 			}
+		}
+
+    
+   	//calculations
+    	duration 	= IIf(BarIndex()==0,Null,br-Ref(br,-1));
+    	amp 		= IIf(BarIndex()==0,Null,swing - Ref(swing,-1));
+     
+    	//SHIFT
+    	delta = BarCount- j-1;      
+    
+    	Swing = Ref( Swing, -delta);
+    	Amp	= Ref(amp,-delta);
+    	dt		= Ref(dt,-delta);
+    	dw		= Ref(dw,-delta);
+    	duration= Ref(duration,-delta);
+  
+	fh=fopen("C:\\Program Files\\Amibroker\\tempswing.txt","w");
+	fputs(NumToStr(j)+"\n",fh);
+
+	//save
+	for (i=BarCount-j-1;i<BarCount;i++)
+		{
+		fputs(NumToStr(Swing[i])+"\n",fh);
+		fputs(NumToStr(amp[i])+"\n",fh);
+		fputs(NumToStr(dt[i])+"\n",fh);
+		fputs(NumToStr(dw[i])+"\n",fh);
+		fputs(NumToStr(duration[i])+"\n",fh);
+		}
+	fclose(fh);
+	fh=fopen("C:\\Program Files\\Amibroker\\tempswing.txt","r");
+	
+}
+
+//load
+swing=Null;
+amp=Null;
+dt=Null;
+dw=Null;
+dr=Null;
+
+j=StrToNum(fgets(fh));
+for (i=BarCount-j-1;i<BarCount;i++)
+		{
+		Swing[i]	=StrToNum(fgets(fh));
+		amp[i]		=StrToNum(fgets(fh));
+		dt[i]		=StrToNum(fgets(fh));		
+		dw[i]		=StrToNum(fgets(fh));
+		duration[i]	=StrToNum(fgets(fh));
+		}
+fclose(fh);
+
+
+
+//plot
+SetChartBkColor (colorBlack);
+
+
+PlotOHLC
+(Ref(swing,-1),Ref(swing,-1),swing,IIf(Ref(swing,-1),swing,Null),"",colorRed,styleBar);
+
+_N(Title=StrFormat("\n"+reverse+"-point swing
+chart"+"\nAT>"+SelectedValue(Swing)));
+_N(Title=Title+StrFormat("\nSW>"+SelectedValue(amp)
++"\nON>"+DateTimeToStr(SelectedValue(dt))));
+_N(Title=Title+StrFormat("\nDY>"+SelectedValue(dw)+"\nDU>"+SelectedValue(duration)));
+
+
+// Use the keyboard shortcut to enable "Price Style Dots" to execute the following code
+if (GetPriceStyle()==styleDots)
+	{
+	amp33=Ref(swing-0.33*amp,0);
+	amp66=Ref(swing-0.66*amp,0);
+	amp25=Ref(swing-0.25*amp,0);
+	amp75=Ref(swing-0.75*amp,0);
+	amp50=Ref(swing-0.50*amp,0);
+
+
+	PlotOHLC(Null,amp33,amp33,amp33,"",colorGreen,styleBar);
+	PlotOHLC(Null,amp66,amp66,amp66,"",colorGreen,styleBar);
+	PlotOHLC(Null,amp25,amp25,amp25,"",colorLightBlue,styleBar);
+	PlotOHLC(Null,amp75,amp75,amp75,"",colorLightBlue,styleBar);
+	PlotOHLC(Null,amp50,amp50,amp50,"",colorYellow,styleBar);
+
+	first = Status("firstvisiblebarindex");
+	last = Status("lastvisiblebarindex");
+	Vrange 	= BarIndex()>first AND BarIndex()<last;	
+	Maxdr		= LastValue(Cum(duration * Vrange));
+	scale		= Maxdr;
+
+	Plot(duration,"",IIf(amp>0,colorBlue,colorOrange),styleHistogram|styleOwnScale,0,scale);
+	}

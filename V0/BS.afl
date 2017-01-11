@@ -1,0 +1,175 @@
+
+/*
+ ####  Defines market hours
+##########################################################
+
+MarketOpen = 080000;//08:00:00;
+MarketClose = 142000;//20:00:00 or 163000
+MarketON = TimeNum() >= MarketOpen AND Now( 4 ) < MarketClose AND NOT WeekEnd;
+MarketOFF = Now( 4 ) >= MarketClose ;//day's over
+Hhmod = frac( MArketclose / 10000 );
+
+if ( Hhmod == 0 )
+    delta = 4100;// minute close time is 00
+else
+    delta = 100;// minute close time is 30
+
+MarketCloseMinusOneMinute = MarketClose - delta;//19:59:00;// one minute before
+EOD to close all positions
+
+MarketCloseAllPos = Now( 4 ) > MarketCloseMinusOneMinute ;// one minute to close
+all positions
+
+_TRACE( "MarketClose = " + MarketClose + "MarketCloseMinusOneMinute = " +
+MarketCloseMinusOneMinute );
+*/
+
+_SECTION_BEGIN("S1");
+r=ln(C/Ref(C,-15));
+z=(r-MA(r,5))/StdErr(r,5);
+pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+s=atan(z)*RTD;
+B1=(s<LLV(s,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S1=(s>HHV(s,30)*0.99 AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B1=ExRem(B1,S1);
+S1=ExRem(S1,B1);
+Short = S1;
+Cover = B1;
+_SECTION_END();
+_SECTION_BEGIN("S2");
+pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+s=atan(C-O)*RTD;
+B2=(s<LLV(s,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S2=(s>HHV(s,30)*0.99  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B2=ExRem(B2,S2);
+S2=ExRem(S2,S2);
+Short = S2;
+Cover = B2;
+_SECTION_END();
+_SECTION_BEGIN("S3");
+P=Ref(C,-15);
+Hp=30;
+aa = LinRegIntercept(P,Hp); 
+bb = LinRegSlope(P,Hp); 
+res=C-(aa + bb *Ref(C,-1)); 
+B3=(res<LLV(res,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S3 =(res>HHV(res,30)*0.99 AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B3=ExRem(B3,S3);
+S3=ExRem(S3,B3);
+Short = S3;
+Cover = B3;
+_SECTION_END();
+_SECTION_BEGIN("S4");
+CHL = Max(C,15 )-Min(C,15);
+OHL = Max(O,15)-Min (O,15);
+ratio=CHL/OHL;
+B4=(ratio<0.9985 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S4 =(ratio>1.0015  AND (C/Ref(C,-5))>1.015);
+B4=ExRem(B4,S4);
+S4=ExRem(S4,B4);
+Short = S4;
+Cover = B4;
+_SECTION_END();
+_SECTION_BEGIN("S5");
+ pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+m=(H+C+O+L)/4;
+std=(m-MA(m,10))/StDev(m,10);
+wave=atan(std)*RTD;
+B5=(Cross(wave,-62) AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S5=(Cross(62,wave)  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B5=ExRem(B5,S5);
+S5=ExRem(S5,B5);
+Short = S5;
+Cover = B5;
+_SECTION_END();
+_SECTION_BEGIN("S6");
+Longbar =15;
+shortbar=5;
+MAH = MA(Max(H,Longbar ),shortbar);
+MAL = MA(Min(L,Longbar ),shortbar);
+spread = MAH - MAL;
+r=(spread-MA(spread,shortbar))/StDerr(spread,shortbar);
+B6=(r<LLV(r,30)*0.99  AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S6=(r>HHV(r,30)*0.99  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B6=ExRem(B6,S6);
+S6=ExRem(S6,B6);
+Short = S6;
+Cover = B6;
+_SECTION_END();
+_SECTION_BEGIN("S7");
+N=15;
+CS = LinRegSlope(C, N);
+CI=LinRegIntercept(C, N);
+y=CI+CS*Ref(C,-1);
+s=y-C;
+B7=(s<LLV(s,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S7=(s>HHV(s,30)*0.99 AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B7=ExRem(B7,S7);
+S7=ExRem(S7,B7);
+Short = S7;
+Cover = B7;
+_SECTION_END();
+_SECTION_BEGIN("S8");
+m=Ref((H+C+L+O)/4,-1);
+CS = LinRegSlope(m, 30);
+CI=LinRegIntercept(m, 30);
+y=m-(CI+CS*m);
+z=(y-MA(y,30))/StdErr(y,30);
+B8=(z<LLV(z,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S8=(z>HHV(z,30)*0.99  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B8=ExRem(B8,S8);
+S8=ExRem(S8,B8);
+Short = S8;
+Cover = B8;
+_SECTION_END();
+_SECTION_BEGIN("S9");
+Index="NDX-NASDAQ-IND-USD";
+Hp=10;
+Lp=1;
+Longbar =20;
+shortbar=5;
+P=Foreign(index,"C",Lp);
+Correl=Correlation(P,C,Hp);
+B9=(Cross(Correl,0.20) AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S9=(Cross(0.95,Correl)  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B9=ExRem(B9,S9);
+S9=ExRem(S9,B9);
+Short = S9;
+Cover = B9;
+_SECTION_END();
+_SECTION_BEGIN("S10");
+function TTF( periods )
+{
+	BuyPower = HHV( High, periods ) - Ref( LLV( Low, periods ), -periods );
+	SellPower = Ref( HHV( High, periods ), -periods ) - LLV( Low, periods );
+	return 100 * (BuyPower - SellPower) / (0.5 * (BuyPower + SellPower));
+}
+
+tt = TTF(15);
+UCL =HHV(tt,60);
+LCL =LLV(tt,60);
+B10=(tt<LLV(tt,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S10=(tt>HHV(tt,30)*0.99  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B10=ExRem(B10,S10);
+S10=ExRem(S10,B10);
+Short = S10;
+Cover = B10;
+Filter =B10 OR S10;
+_SECTION_END();
+
+Buy= (B1 OR B2 OR B3 OR B4 OR B5 OR B6 OR B7 OR B8 OR B9 OR B10);
+Sell=(S1 OR S2 OR S3 OR S4 OR S5 OR S6 OR S7 OR S8 OR B9 OR S10);
+Short = Sell;
+Cover = Buy;
+Plot(C, "Combined Strategy ## S1 to S10", colorWhite, 4);
+PlotShapes( Buy* shapeUpArrow , colorGreen, 0);
+PlotShapes( Sell* shapeDownArrow , colorBlue, 0);
+
+//http://www.amibroker.com/at/
+

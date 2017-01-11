@@ -1,0 +1,53 @@
+
+Filter = 1;
+NumColumns = 5;
+Column0 = O; Column0Name = "O"; Column0Format = 1.2;
+Column1 = H; Column1Name = "H"; Column1Format = 1.2;
+Column2 = L; Column2Name = "L"; Column2Format = 1.2;
+Column3 = C; Column3Name = "C"; Column3Format = 1.2;
+Column4 = V; Column4Name = "V"; Column4Format = 1.0;
+
+Opt1 = Optimize("DX Level", 16, 10, 30, 1);
+Opt2 = Optimize("Period", 15, 10, 50, 1); // n
+
+n = Opt2;
+BullFear = (HHV(High,n) - LLV(High,n))/2 + LLV(High,n);
+BearFear = (HHV(Low,n) - LLV(Low,n))/2 + LLV(Low,n);
+
+// Exploration in Amibroker
+AddColumn(BullFear, "BullFear", format=1.2);
+AddColumn(BearFear, "BearFear", format=1.2);
+
+Buy   = Cross(Close, BullFear) AND ADX(10) > Opt1;
+Short = Cross(BearFear, Close);
+
+// Exploration in Amibroker
+AddColumn(Buy,        "Buy",        format=1.0);
+AddColumn(Short,      "Short",      format=1.0);
+//AddColumn(BuyPrice,   "BuyPrice",   format=1.2);
+//AddColumn(ShortPrice, "ShortPrice", format=1.2);
+
+Sell  = Short;
+Cover = Buy;
+
+// Exploration in Amibroker
+AddColumn(Sell,       "Sell",       format=1.0);
+AddColumn(Cover,      "Cover",      format=1.0);
+//AddColumn(SellPrice,  "SellPrice",  format=1.2);
+//AddColumn(CoverPrice, "CoverPrice", format=1.2);
+
+Buy   = ExRem(Buy, Sell);
+Sell  = ExRem(Sell, Buy);
+Short = ExRem(Short, Cover);
+Cover = ExRem(Cover, Short);
+
+
+MaxGraph = 3;
+Graph0 = C; Graph0Style = 4; Graph0Color = 1;
+Graph1 = BullFear; Graph1Style = 1; Graph1Color = 5;
+Graph2 = BearFear; Graph2Style = 1; Graph2Color = 4;
+
+Title = Name()
+        + " - C (Black) = " + WriteVal(Graph0, 1.2)
+        + ", BullFear (Green) = " + WriteVal(Graph1, 1.2)
+        + ", BearFear (Red) = " + WriteVal(Graph2, 1.2);

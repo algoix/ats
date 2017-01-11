@@ -1,0 +1,178 @@
+_SECTION_BEGIN("WAVE"); 
+EnableTextOutput(False);
+SetChartOptions(0, chartShowDates); 
+RequestTimedRefresh(1);
+Filename = StrLeft(_DEFAULT_NAME(),StrLen(_DEFAULT_NAME()));
+_N(Title = Filename );
+ 
+VarPfx = "Btn1"; // some var that reflects the trading file
+// ####  Parameters   ########################################################################################################
+AutoTrade = ParamToggle("Auto trade", "ON|OFF");
+Contracts   = Param("Num contracts", 50, 1, 1000, 1);
+BuyOrder    = ParamTrigger("Place Buy order","BUY");
+SellOrder = ParamTrigger("Place Sell order","SELL");
+CancelAll = ParamTrigger("Cancel all pending orders","CANCELL ALL");
+// #### STRATEGY ################################################################################
+//BID-ASK based order
+spread=(GetRTData("Ask")-GetRTData("Bid"));
+FQ=spread;
+BP=GetRTData("Bid")+FQ*0.6;//easy to buy
+SP=GetRTData("Ask")-FQ*0.25;//strict to sell
+//System to work after certain change 
+nbar=10;
+down=Zig(C,nbar)-C;// Change in positive and negative. If change is above 1 then buy -sell condition should work
+up=C-Zig(C,nbar);
+input = LinRegSlope((C+O)/2,nbar);
+
+pi=4*atan(1);
+RTD=180/pi;
+DTR=pi/180;
+
+sinewave=sin(input*DTR)*1000;
+bu=Cross(LLV(sinewave,30)*0.99,sinewave);
+
+se=Cross(sinewave,HHV(sinewave,30)*0.99) ;
+Buy=bu AND C<MA(C,30) AND ROC(C,5)<(-0.01);
+Sell=se;
+Plot(SineWave , "SineWave ", colorBlue, styleLine);
+PlotShapes( Buy* shapeUpArrow , colorGreen, 0);
+PlotShapes( Sell* shapeDownArrow , colorRed, 0); 
+
+// ####  Static vars reset   ##################################################################################################
+if( Nz(StaticVarGet(varPfx  + "Init") == False) )
+{
+    StaticVarSetText(varPfx  + "orderID", "");
+    StaticVarSetText(VarPfx + "lastTrade", ""); 
+    StaticVarSet(VarPfx + "numPositions", 0);
+    _TRACE("# init, " + NumToStr(StaticVarGet(varPfx  + "num"), 1.0));
+}
+ 
+// ####  Trading section ########################################################################################################
+if(autotrade) 
+{
+RequestTimedRefresh(1);
+ibc = GetTradingInterface("IB");
+ConnectedStatus = ibc.IsConnected();    // get the connection status, 2 is OK
+ibc = GetTradingInterface("IB");
+ConnectedStatus = ibc.IsConnected();    // get the connection status, 2 is OK
+BuyOrderID = StaticVarGetText(VarPfx + "BuyOrderID");
+SellOrderID = StaticVarGetText(VarPfx + "SellOrderID");   
+LastBuyTWSMsg = ibc.getLastError( BuyOrderID );
+LastSellTWSMsg = ibc.getLastError( SellOrderID );
+BuyOrderStatus = ibc.GetStatus( BuyOrderID, True );
+SellOrderStatus = ibc.GetStatus( SellOrderID, True );
+LastBuyTime= Nz(StaticVarGet(VarPfx + "LastBuyTime")); 
+LastSellTime= Nz(StaticVarGet(VarPfx + "LastSellTime")); 
+BuyLockoutPeriod =5;
+SellLockoutPeriod =3;
+NewSecond = Status("redrawaction");   
+BuyCountDown = Nz(StaticVarGet(VarPfx + "BuyCountDown")); 
+SellCountDown = Nz(StaticVarGet(VarPfx + "SellCountDown")); 
+averageprice=0;
+
+    if( ConnectedStatus == 2 OR ConnectedStatus == 3) // connected to TWS with no error messages
+    {
+        BuyOrderID = StaticVarGetText(VarPfx + "BuyOrderID");
+        SellOrderID = StaticVarGetText(VarPfx + "SellOrderID");
+        BuyPending=ibc.IsOrderPending(BuyOrderID);
+        SellPending=ibc.IsOrderPending(SellOrderID);
+        BuyOrderStatus = ibc.GetStatus( BuyOrderID, True );
+		SellOrderStatus = ibc.GetStatus( SellOrderID, True );
+        oldNumPositions = StaticVarGet(VarPfx + "numPositions");
+        numPositions  = ibc.GetPositionSize(Name()); 
+        StaticVarSet(VarPfx + "numPositions", numPositions  );
+        LastTrade = StaticVarGetText(VarPfx + "lastTrade"); 
+        _TRACE("# buy, positions = " + NumToStr(numPositions, 1.0) + ", last trade = " + LastTrade + ", BuyOID = " + BuyOrderID +", SellOID = "+ SellOrderID);
+ 
+        if (BuyOrderStatus == "Cancelled" )
+        {    
+            BuyOrderID = StaticVarSetText(VarPfx + "BuyOrderID", "");
+         } 
+        else if (SellOrderStatus == "Cancelled")
+        {    
+            
+            SellOrderID = StaticVarSetText(VarPfx + SellOrderID, ""); 
+        }
+        if( NewSecond ) 
+		{ 
+			BuyCountDown = Max( 0, Nz(StaticVarGet(VarPfx +"BuyCountDown"))-1); 
+			StaticVarSet(VarPfx +"BuyCountDown", BuyCountDown); 
+			if( BuyCountDown == 0 AND NOT BuyPending ) StaticVarSetText(VarPfx +"BuyOrderID","");  
+			SellCountDown = Max( 0, Nz(StaticVarGet(VarPfx +"SellCountDown"))-1); 
+			StaticVarSet(VarPfx +"SellCountDown", SellCountDown); 
+			if( SellCountDown == 0 AND NOT SellPending ) StaticVarSetText(VarPfx +"SellOrderID",""); 
+		} 
+        openpos = ibc.GetPositionList();   
+        for( i = 0; ( symbol = StrExtract( openpos, i ) ) != ""; i++ ) 
+		{ 
+			if(symbol==Name())
+			{
+			aprice = ibc.GetPositionInfo(symbol, "Avg. cost");
+			averageprice=aprice; 
+			} 
+		}    
+      
+		
+		if( BuyOrder )
+       {
+            
+            BuyOrderID = ibc.ModifyOrder( BuyOrderID, Name(), "Buy",Contracts, "LMT", BP, 0, "Day",True );
+            StaticVarSetText(VarPfx + "BuyOrderID", BuyOrderID);
+            StaticVarSetText(VarPfx + "lastTrade", "Buy"); 
+            _TRACE("# buy, positions = " + NumToStr(numPositions, 1.0));
+       }
+ 
+        if( SellOrder )
+        {
+           
+            SellOrderID = ibc.ModifyOrder( SellOrderID, Name(), "Sell",Contracts, "LMT", SP,0, "Day", True );
+            StaticVarSetText(VarPfx + "SellOrderID",SellOrderID);
+            StaticVarSetText(VarPfx + "lastTrade", "Sell"); 
+            _TRACE("# sell, positions = " + NumToStr(numPositions, 1.0));
+        }
+		 
+		       
+        else if( CancelAll )
+        {
+            
+            ibc.CancelAllPendingOrders( );
+            if( SellPending )
+				{
+					ibc.CancelOrder( SellOrderID ); 
+				}
+            _TRACE("# cancel, ");
+        }
+        LastTWSMsg = ibc.getLastError( 0 );
+        
+    // *//the following will display in the interprettion window
+       
+		printf("\n Last Order type:\t " + LastTrade + "\nBuy Order Status:\t " + BuyOrderStatus +"\nSell Order Status:\t " + SellOrderStatus + "\nBuy Order ID:\t " + StaticVarGetText(VarPfx + "BuyOrderID") +"\n Sell Order ID:\t " +StaticVarGetText(VarPfx + "SellOrderID") + "\nNum positions:\t " + NumToStr(ibc.GetPositionSize( Name() ),1.0,False) +
+        "\nAverage Price:\t"+averageprice + "\nLast Buy TWS Msg:\t " + LastBuyTWSMsg +"\nLast Sell TWS Msg:\t " + LastSellTWSMsg );
+		
+ 
+    }   
+    
+    else // ConnectedStatus == 0 OR ConnectedStatus == 1, lost connection
+    {
+        // handle commection errors 
+        if(ConnectedStatus == 0) stat = "Not Connected."; else if(ConnectedStatus == 1) stat = "Lost Connection.";
+        SetChartBkColor( colorYellow);      
+    // the following will display in the interprettion window
+        printf("\nTWS Status: " + stat + "\n"); 
+    }
+} // end auto trading loop
+else
+{
+    SetChartBkColor( colorBlue);
+    // the following will display in the interprettion window
+    printf("\n1. Autotrading is turned off\n" + "2. TWS not started." );
+}
+ 
+_SECTION_END();
+
+
+
+
+
+
+

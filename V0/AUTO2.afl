@@ -1,0 +1,460 @@
+// ####  functions 
+####################################################################
+
+#include_once "C:\ProgramFiles\AmiBroker\Formulas\SaveTradeLog.afl"
+
+// #### init parameters of the active chart
+############################################
+
+_N( SectionName = "AUTO TRADING" );
+_N( Ver = "Edit 1" ); // this is my version number
+_SECTION_BEGIN( SectionName );
+EnableTextOutput( False ); // prevents incidental text from being displayed in the interpretation
+Filename = StrLeft( _DEFAULT_NAME(), StrLen( _DEFAULT_NAME() ) - 2 ) + " " +
+Ver; // the name of the program and is displayed on the title line
+// CAUTION: VarPfx is used to make the static variables unique to prevent bizarre results if you use multiple versions of the trading program simultaneously.
+VarPfx = Filename + Ver; // static var prefix
+symb = Name();
+Contracts = 50;// quantity send
+typeOrder = "LMT";
+SetChartOptions( 1, chartShowArrows | chartShowDates );
+RequestTimedRefresh( 1 );
+DOW = Now( 9 );//day of the week
+WeekEnd = IIf( ( DOW == 1 OR DOW == 7 ), 1, 0 );
+VarPfx = "Stp1"; // some static var personnalized to this formula
+
+
+// ####  Defines market hours
+##########################################################
+
+MarketOpen = 080000;//08:00:00;
+MarketClose = 142000;//20:00:00 or 163000
+MarketON = TimeNum() >= MarketOpen AND Now( 4 ) < MarketClose AND NOT WeekEnd;
+MarketOFF = Now( 4 ) >= MarketClose ;//day's over
+Hhmod = frac( MArketclose / 10000 );
+
+if ( Hhmod == 0 )
+    delta = 4100;// minute close time is 00
+else
+    delta = 100;// minute close time is 30
+
+MarketCloseMinusOneMinute = MarketClose - delta;//19:59:00;// one minute before EOD to close all positions
+
+MarketCloseAllPos = Now( 4 ) > MarketCloseMinusOneMinute ;// one minute to close all positions
+
+_TRACE( "MarketClose = " + MarketClose + "MarketCloseMinusOneMinute = " + MarketCloseMinusOneMinute );
+
+// #### Parameters
+#####################################################################
+
+//AutoTrading	= ParamToggle( "AutoTrading", "Off|Running" );
+Contracts	= Param( "Num contracts", 50, 50, 500, 5 );
+
+BuyOrder  	= ParamTrigger( "Place Buy order", "Buy" );
+
+SellOrder = ParamTrigger( "Place Sell order", "Sell" );
+
+ReverseOrder = ParamTrigger( "Place Reverse order", "Reverse" );
+
+CloseAll  = ParamTrigger( "Close all positions", "Close all" );
+
+CancelAll = ParamTrigger( "Cancel all pending orders", "Cancel all" );
+
+Reset		= ParamTrigger( "Reset", "Reset" );
+
+// START ####  your timing system here 
+################################################
+//
+// Place your timing system here
+//
+// then the plots
+//
+// END ####  your timing system here 
+##################################################
+
+//AT master switch, Automated Trading always OFF when AB starts
+sAutoTrading = Nz( StaticVarGet( "AutoTrading" ) );
+
+ATonTrigger = ParamTrigger( "Start AutoTrading", "START" );
+
+AToffTrigger = ParamTrigger( "Stop AutoTrading", "STOP" );
+
+if ( ATonTrigger )
+{
+    StaticVarSet( "sAutoTrading", 1 );
+    StaticVarSet( "sFirstWrite", True );
+}
+else
+    if ( AToffTrigger )
+        StaticVarSet( "sAutoTrading", 0 );
+
+Title = "\nsAutoTradingDH " + WriteIf( StaticVarGet( "sAutoTrading" ), "On", "Off" );
+
+tn = Now();
+
+_TRACE( "***********************Time = " + tn );
+
+_TRACE( "\nsAutoTradingStart = " + StaticVarGet( "sAutoTrading" ) );
+
+// #### Static vars reset
+##############################################################
+
+if ( reset  )
+{
+
+    FileName = " ";
+    _TRACE( "\n1. Filename = " + Filename );
+    StaticVarSet( "sFirstWrite", True );
+    _TRACE( "\n2. sFirstWrite = " + StaticVarGet( "sFirstWrite" ) );
+    ps = "";
+    _TRACE( "\n3. ps  = " + ps );
+    StaticVarSet( "sAutoTrading ", 0 );// AT OFF
+    _TRACE ( "\n4. sAutoTrading = " + StaticVarGet( "sAutoTrading " ) );
+    StaticVarSet( "sAutoTrading ", 1 );// AT ON
+    Title = "\nsAutoTrading " + WriteIf( StaticVarGet( "sAutoTrading" ), "On",
+"Off" ) + "\n\nRESET done... " ;
+}
+
+// ####  AutoTrading section
+###########################################################
+
+//StaticVarSet( "logflag", 0 );
+
+if ( StaticVarGet( "sAutoTrading" ) )
+{
+    if (  LastValue( MarketON ) )  		// MarketON = TimeNum() >= MarketOpen AND Now( 4 ) < MarketClose AND NOT WeekEnd
+    {
+        _TRACE( "\nMarketON = " + MarketON + " MarketOFF = " + MarketOFF );
+        _TRACE( "\nsFirstWriteINIT = " + StaticVarGet( "sFirstWrite" ) );
+
+        ibc = GetTradingInterface( "IB" );
+        StaticVarSet( "ConnectedStatus", ibc.IsConnected() );	// get the connection status, 2 is OK
+        LastTWSMsg = ibc.getLastError( 0 );
+
+        if ( StaticVarGet( "ConnectedStatus" ) == 2 OR StaticVarGet( "ConnectedStatus" ) == 3 ) // connected to TWS with no error messages
+        {
+            OrderID = StaticVarGetText( VarPfx + "OrderID" );
+            _TRACE( "OrderIDdeb = " + ORderID );
+            OrderStatus = ibc.GetStatus( OrderID, True );
+            oldNumPositions = StaticVarGet( VarPfx + "numPositions" );
+            _TRACE( "oldNumPositions = " + oldNumPositions );
+            numPositions  = ibc.GetPositionSize( symb );
+            StaticVarSet( VarPfx + "numPositions", numPositions  );
+            _TRACE( "NumPositions = " + NumPositions );
+
+            LastTrade = StaticVarGetText( VarPfx + "lastTrade" );
+            _TRACE( "# buy, positions = " + NumToStr( numPositions, 1.0 ) + ", last trade = " + LastTrade + ", OID = " + OrderID );
+
+
+            // the following will display in the interpretation window
+            printf( "\nGeneral Status :" + "\n\nLastTrade : " + LastTrade + "\nOrder Status: " + OrderStatus + "\nOrder ID: " + StaticVarGetText( VarPfx + "OrderID" ) +
+                    "\nNum positions: " + NumToStr( ibc.GetPositionSize( symb ), 1.0, False ) +    "\nLast TWS Msg: " + StaticVarGet( "LastTWSMsg" ) );
+
+
+				if (  ( LastTrade == "Buy" AND numPositions  > oldNumPositions )
+				OR
+                    ( LastTrade == "Sell" AND numPositions  < oldNumPositions )
+				OR
+                    ( LastTrade == "Close" AND numPositions  == 0 ) 
+                OR
+                    ( numPositions  != oldNumPositions AND StaticVarGet("logflag" ) == 1 ) )
+				{
+                // wait for filled order then send trade log
+                OrderID = StaticVarGetText( VarPfx + "OrderID" );       // get OrderID if filled or cancelled
+                _TRACE( "OrderIDLOG = " + ORderID );
+
+                StaticVarSetText( VarPfx + "lastTrade", StaticVarGetText( "action" ) );
+                _TRACE( "# : " + StaticVarGetText( "action" ) + " " + NumToStr(numPositions, 1.0 ) );
+
+                // saves the report of the last trade into text file log when filled
+
+                if ( ibc.GetPositionSize( symb ) != oldNumPositions AND StaticVarGet( "logflag" ) == 1 )
+                {
+
+                    _TRACE( "oldNumPositions = " + oldNumPositions + " Staticlogflag= " + StaticVarGet( "logflag" ) );
+                    numcontractlog = StaticVarGet( "numcontractlog" );
+                    _TRACE( "numcontractlog = " + StaticVarGet( "numcontractlog") );
+                    _TRACE( "\nLOGaction = " + StaticVarGetText( "action" ) + "\nLOGtypeOrder = " + typeOrder + "\nLOGOrderID = " + OrderID + "\nLOGContracts= " + Contracts + "\nLOGavgCost= " + avgCost + "\nLOGsFirsWrite = " + StaticVarGet( "sFirstWrite" ) );
+                    avgCost = ibc.GetPositionInfo( symb, "Avg. Cost" ) / 10; //ask for the filled price
+                    SaveTradeLog( StaticVarGetText( "action" ) , typeOrder,OrderID , numcontractlog, avgCost, StaticVarGet( "sFirstWrite" ) );
+                    StaticVarSet( "logflag", 0 );
+                    LastTWSMsg = ibc.getLastError( 0 );
+                    _TRACE( " Send To Log " + StaticVarGetText( "action" ) + " =OK" );
+                }
+
+                LastTWSMsg = ibc.getLastError( 0 );
+
+                // the following will display in the interpretation window
+                printf( "\n\n\nReport Order Status" + "\n\nOrder type: " + LastTrade + "\nOrder Status: " + OrderStatus + "\nOrder ID: " + StaticVarGetText( VarPfx + "OrderID" ) +
+                        "\nNum positions: " + NumToStr( ibc.GetPositionSize(symb ), 1.0, False ) +"\nLast TWS Msg: " + LastTWSMsg );
+                _TRACE( "Position Send To Log " + StaticVarGetText( "action" ) + " = Passed"  );
+            }
+
+            _TRACE( "LastTrade = " + LastTrade );
+
+            // Reverse Position or CloseAll or CancelAll
+
+            _TRACE( "numPositions  = " + StaticVarGet( VarPfx + "numPositions" )
+);
+
+            if ( NOT MarketCloseAllPos )	// MarketCloseAllPos = Now( 4 ) <MarketCloseMinusOneMinute
+            {
+                if ( CloseAll  )
+                {
+                    numPositions  = ibc.GetPositionSize( symb );
+                    ibc.CancelAllPendingOrders( );
+                    ibc.CloseAllOpenPositions();
+
+                    if ( StaticVarGetText( "action" ) == "Sell" )
+                    {
+                        StaticVarSetText( "action" , "Buy" );
+                        _TRACE( "lastTradeSELL2buy= " + StaticVarGetText( VarPfx+ "lastTrade" ) );
+                    }
+                    else
+                        if ( StaticVarGetText( VarPfx + "lastTrade" ) == "Buy")
+                        {
+                            StaticVarSetText( "action" , "Sell" );
+                            _TRACE( "lastTradeBUY2sell= " + StaticVarGetText(VarPfx + "lastTrade" ) );
+                        }
+
+                    StaticVarSetText( VarPfx + "lastTrade", "Close" );
+
+                    StaticVarSet( "logflag", 1 );
+                    StaticVarSet( "numcontractlog", abs( numPositions )  );
+                    _TRACE( "# close, positions = " + NumToStr( numPositions,1.0 ) );
+                }
+                else
+                    if ( CancelAll )
+                    {
+                        // retrieve orderID from previous run, will be empty if no order was placed before
+                        OrderID = StaticVarGetText( "OrderID" + symb );
+                        ibc.CancelAllPendingOrders( );
+                        _TRACE( "# cancel, " );
+
+                    }
+                    else
+                        if ( ReverseOrder )			// place reverse order
+                        {
+                            if ( numPositions  != 0 )  		// reverse position with "Contracts" X 2
+                            {
+
+                                if ( StaticVarGet( "logflag" ) == 0 )
+                                    oldNumPositions = ( ibc.GetPositionSize(symb ) );
+
+                                // retrieve orderID from previous run
+                                OrderID = StaticVarGetText( VarPfx + "OrderID" +symb );
+
+                                _TRACE( "OrderIDRetrieveReverse = " +  OrderID);
+
+                                // retrieve last trade action from previous run
+                                StaticVarSetText( VarPfx + "lastTrade",StaticVarGetText( "action" ) );
+
+                                _TRACE( "ActionRetrieveReverse = " +  lastTrade);
+
+                                _TRACE( "logflagRetrieveReverse = " + StaticVarGet( "logflag" ) );
+
+                                if ( StaticVarGetText( "action" ) == "Sell" )
+                                {
+                                    StaticVarSetText( "action" , "Buy" );
+                                    _TRACE( "lastTradeSELL2buy= " + StaticVarGetText( VarPfx + "lastTrade" ) );
+                                }
+                                else
+                                    if ( StaticVarGetText( VarPfx + "lastTrade" ) == "Buy" )
+                                    {
+                                        StaticVarSetText( "action" , "Sell" );
+                                        _TRACE( "lastTradeBUY2sell= " + StaticVarGetText( VarPfx + "lastTrade" ) );
+                                    }
+
+                                if ( ibc.IsOrderPending( OrderID ) )
+                                {
+                                    OrderID = ibc.ModifyOrder( OrderID, symb,StaticVarGetText( "action" ), Contracts * 2, typeOrder , 0, 0, "Day", True );
+                                    StaticVarSet( "logflag", 1 );
+                                    StaticVarSet( "numcontractlog", Contracts * 2 );
+                                }
+                                else
+                                {
+                                    OrderID = ibc.PlaceOrder( symb,StaticVarGetText( "action" ), Contracts * 2, typeOrder , 0, 0, "Day", True );
+                                    StaticVarSet( "logflag", 1 );
+                                    StaticVarSet( "numcontractlog", Contracts *2 );
+
+                                }
+
+                                // store orderID for next run so we know which order to modify
+                                StaticVarSetText( VarPfx + "OrderID", OrderID);
+
+                                StaticVarSetText( VarPfx + "lastTrade",StaticVarGetText( "action" ) );
+
+                                _TRACE( "# : " + StaticVarGetText( "action" ) +" " + NumToStr( numPositions, 1.0 ) );
+                            }
+                        }
+                        else
+                            if ( BuyOrder )			// number of lots contained in "Contracts" only
+                            {
+                                if ( StaticVarGet( "logflag" ) == 0 )
+                                    oldNumPositions = ( ibc.GetPositionSize(symb ) );
+
+                                // retrieve orderID from previous run, will beempty if no order was placed before
+                                OrderID = StaticVarGetText( VarPfx + "OrderID" +symb );
+
+                                _TRACE( "logflag = " +  StaticVarGet( "logflag") );
+
+                                StaticVarSetText( "action" , "Buy" );
+
+                                if ( ibc.IsOrderPending( OrderID ) )
+                                {
+                                    OrderID = ibc.ModifyOrder( OrderID, symb,"Buy", Contracts , typeOrder , 0, 0, "Day", True );
+                                    StaticVarSet( "logflag", 1 );
+                                    StaticVarSet( "numcontractlog", Contracts);
+                                }
+                                else
+                                {
+                                    OrderID = ibc.PlaceOrder( symb, "Buy",Contracts , typeOrder , 0, 0, "Day", True );
+                                    StaticVarSet( "logflag", 1 );
+                                    StaticVarSet( "numcontractlog", Contracts);
+
+                                }
+
+                                // store orderID for next run so we know which order to modify
+                                StaticVarSetText( VarPfx + "OrderID", OrderID
+);
+                            }
+                            else
+                                if ( SellOrder )		// number of lots contained in "Contracts" only
+                                {
+                                    if ( StaticVarGet( "logflag" ) == 0 )
+                                        oldNumPositions = ( ibc.GetPositionSize(symb ) );
+
+                                    // retrieve orderID from previous run, will be empty if no order was placed before
+                                    OrderID = StaticVarGetText( VarPfx +"OrderID" + symb );
+
+//                                   if ( StaticVarGet( "logflag" ) == 0 )
+
+                                   //  oldNumPositions = ( ibc.GetPositionSize( symb ) );
+
+                                    _TRACE( "logflag = " +  StaticVarGet("logflag" ) );
+
+                                    StaticVarSetText( "action" , "Sell" );
+
+                                    if ( ibc.IsOrderPending( OrderID ) )
+                                    {
+                                        OrderID = ibc.ModifyOrder( OrderID,symb, "Sell", Contracts , typeOrder , 0, 0, "Day", True );
+                                        StaticVarSet( "logflag", 1 );
+                                        StaticVarSet( "numcontractlog",Contracts );
+                                    }
+                                    else
+                                    {
+                                        OrderID = ibc.PlaceOrder( symb, "Sell",Contracts , typeOrder , 0, 0, "Day", True );
+                                        StaticVarSet( "logflag", 1 );
+                                        StaticVarSet( "numcontractlog",Contracts );
+
+                                    }
+
+                                    // store orderID for next run so we know which order to modify
+                                    StaticVarSetText( VarPfx + "OrderID",OrderID );
+                                }
+            }
+
+            else 							// last minute
+            {
+                // CloseAll
+                if ( CloseAll  )			//  20" in the last minute to activateCloseAll button
+                {
+                    if ( ibc.GetPositionSize( symb ) != 0 )
+                    {
+                        _TRACE( "\nMarketOFF in one minute then CloseALL..." );
+                        numPositions  = ibc.GetPositionSize( symb );
+                        ibc.CancelAllPendingOrders( );
+                        ibc.CloseAllOpenPositions();
+
+                        if ( StaticVarGetText( "action" ) == "Sell" )
+                        {
+                            StaticVarSetText( "action" , "Buy" );
+                            _TRACE( "lastTradeSELL2buy= " + StaticVarGetText(VarPfx + "lastTrade" ) );
+                        }
+                        else
+                            if ( StaticVarGetText( VarPfx + "lastTrade" ) =="Buy" )
+                            {
+                                StaticVarSetText( "action" , "Sell" );
+                                _TRACE( "lastTradeBUY2sell= " + StaticVarGetText( VarPfx + "lastTrade" ) );
+                            }
+
+                        StaticVarSetText( VarPfx + "lastTrade", "Close" );
+
+                        StaticVarSet( "logflag", 1 );
+                        StaticVarSet( "numcontractlog", abs( numPositions )  );
+                        _TRACE( "# closeMKTOFF, positions = " + NumToStr(numPositions, 1.0 ) );
+                    }
+                }
+
+                // The last 40 seconds
+                else
+                    if ( Now( 4 ) >= MarketCloseMinusOneMinute + 20 )
+                    {
+                        if ( ibc.GetPositionSize( symb ) == 0 )
+                        {
+                            StaticVarSet( "sAutoTrading", False ); // turn auto trading off
+                            _TRACE( "\nFLAT : In 40 seconds auto trading is turned off..." );
+                        }
+                        else // display a warning, not flat
+                        {
+                            printf ( "\n NOT FLAT ! Close all orders manually"
+);
+                            _TRACE( "\n NOT FLAT ! Close all orders manually before the end of the minute" );
+                        }
+                    }
+            }
+        }
+        else // ConnectedStatus == 0 OR ConnectedStatus == 1, lost connection
+        {
+            // handle commection errors
+            if ( StaticVarGet( "ConnectedStatus" ) == 0 )
+                StaticVarSet( "stat", "NOT Connected." );
+            else
+                if ( StaticVarGet( "ConnectedStatus" ) == 1 )
+                    StaticVarSet( "stat", "Lost Connection." );
+
+            StaticVarSet( "sAutoTrading", False ); // turn auto trading off
+
+            SetChartBkColor( colorYellow );
+
+            // the following will display in the interprettion window
+
+            printf( "\nTWS Status: " + StaticVarGet ( "stat" ) + "\n" );
+
+
+            // the following will display in the interpretation window
+
+            printf( "\n\n\nConnection Error Status : " +
+                    "\n\nLastTrade : " + StaticVarGetText( VarPfx + "lastTrade") +
+                    "\nOrder ID: " + StaticVarGetText( VarPfx + "OrderID" ) +
+                    "\nNum positions: " + NumToStr( StaticVarGet( "numPositions"), 1.0, False ) +
+                    "\nLast TWS Msg: " + StaticVarGet( "LastTWSMsg" ) );
+
+            OrderID = StaticVarGetText( VarPfx + "OrderID" );
+
+            _TRACE( "\n# buy, positions = " + NumToStr( StaticVarGet("numPositions" ), 1.0 ) + ", last trade = " + StaticVarGetText( VarPfx +"lastTrade" ) + ", OID = " + OrderID );
+        }
+    }
+    else								// Market OFF
+        if ( StaticVarGet( "sAutoTrading" ) == 1 )
+        {
+            StaticVarSet ( "sAutoTrading", 0 );
+            stat = "Connection Closed, Market OFF.";
+            SetChartBkColor( colorYellow );
+            // the following will display in the interprettion window
+            printf( "\nTWS Status: " + stat + "\n" + "sAutoTrading = " + StaticVarGet ( "sAutoTrading" ) );
+            _TRACE( "\nsAutoTradingOFF = " + StaticVarGet( "sAutoTrading" ) );
+        }
+
+    //LastTWSMsg = ibc.getLastError( 0 );
+} //end auto trade loop
+else
+{
+    SetChartBkColor( colorPink );
+    // the following will display in the interpretation window
+    printf( "\n1. Autotrading is turned off\n" +
+            "2. TWS not started." );
+}
+
+
+

@@ -1,0 +1,30 @@
+PosQty = 5; // You can define here how many open positions you want
+SetOption("MaxOpenPositions", PosQty );
+PositionSize = -100/PosQty; // invest 100% of portfolio equity divided by max. position count
+
+
+
+maxpos = 5; // maximum number of open positions
+SetOption("InitialEquity", 25000 ); // set initial equity = 100K
+SetOption( "MaxOpenPositions", maxpos );
+SetPositionSize( 50, spsShares ); // number of shares/contracts per trade
+
+
+http://www.amibroker.com/guide/h_portfolio.html
+
+SetCustomBacktestProc(“formulas\\include\\cbt_midlevel.afl”,True);
+SetOption(“CommissionAmount”,0.0);
+SetOption(“MaxOpenshort”,0);
+SetOption(“MaxOpenLong”,5);
+SetOption(“MaxOpenPositions”,5);
+SetPositionSize( 20, spsPercentOfEquity);
+SetTradeDelays(0,0,0,0);
+SetBacktestMode(backtestRotational);
+EnableRotationalTrading() ;
+idx           = Foreign(“QQQQ”,”Close”);
+score         = TSI();
+Score         = IIf(idx>MA(idx,200) OR idx>MA(idx,30),score,0);
+PositionScore = IIf(Year()>=2014 AND DayOfWeek()==5,score,scoreNoRotate);
+maxDD()
+
+

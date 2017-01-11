@@ -1,0 +1,937 @@
+
+/*This script will allow to graphically enter orders for Interactive Brokers. You can use the chart to select where we want to enter and where you want to place 
+the stop loss and target exit orders.  Once you have selected the price levels, you  can transmit the order to TWS for execution.  It includes some advanced features such
+as automatically adjusting order sizes based on max shares, max position size, and max amount you are willing risk on a trade.
+ 
+Features:
+- graphical interface for selecting order parts
+- display various order price levels on the chart
+- configuable parameters to control position size and risk
+- enter with a market, limit, or stop order
+- exit with a bracketed OCA orde
+- show or hide the interface with a click of button on chart
+- send orders for immediate execution in TWS or just park the order set in TWS for you to execute there
+- symbol independent statefulness of order and price level values
+ 
+Limitations:
+- only developed and tested US stocks (that's all I trade)
+- futures and forex leverage and contract pecularities are not taken into account and should not be traded with this script.
+- foreign stocks have not been tested, so they may not work.
+- current positions are not reflected in the interface
+ 
+ 
+When we initially add the script to a chart, it will show a button "Show Trading". Click this to see the trading interface.  Across the top will display the entry order types.
+Select one of these to begin setting up the order.  "BUY" and "SELL" are market entries and the ENTRY field will auto-fill with the current price. BSTOP, SSTOP, BLIM, and SLIM 
+require you to select the desired entry price.  To select the entry price, you first click on the ENTRY button, then you simply click anywhere on the chart where you want the entry to be at.
+After this, you sothe same thing for the STLOSS and TGT fields.  You can choose to CHECK the order, SEND the order to TWS, or CLEARthe order.  SEND'ing the order will automatically check that 
+the order is valid. For instance, if you create a BLIM order, then the TGT must be above the entry price and the STLOSS must be below the entry price.  If there is a problem with the order, then
+the problem will display in the MESSAGE field.  The labels outlined in RED show the current state of what you are doing. 
+We can configure a number of parameters to control risk:
+ 
+Max Trade Value         - what is the max position size you are willing to make
+Max Shares                  - what is the max number of shares you willing to buy
+Enforce Target Order        - always force yourself to enter a target order
+Enforce Stop Loss Order - always force yourself to enter a stop loss order
+Max Risk Amt $          - what is the max you are willing to risk if you stop loss is hit
+Enforce Max Risk Amt        - force this to always happen
+Add Cancel Mkt Order        - parks a non-executed MARKET order in  TWS so that you can bail out of the position manually if desired (remember to cancel your bracket orders if you do manually exit the position with the market order
+Xmit Always On          - do you want the orders executed when sent to TWS or do you just want to park them in TWS so you can manually execute them.
+ 
+-------------------------------------------------------------------*/
+
+
+_SECTION_BEGIN("S1");
+r=ln(C/Ref(C,-15));
+z=(r-MA(r,5))/StdErr(r,5);
+pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+s=atan(z)*RTD;
+B1=(s<LLV(s,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S1=(s>HHV(s,30)*0.99 AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B1=ExRem(B1,S1);
+S1=ExRem(S1,B1);
+Short = S1;
+Cover = B1;
+_SECTION_END();
+_SECTION_BEGIN("S2");
+pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+s=atan(C-O)*RTD;
+B2=(s<LLV(s,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S2=(s>HHV(s,30)*0.99  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B2=ExRem(B2,S2);
+S2=ExRem(S2,S2);
+Short = S2;
+Cover = B2;
+_SECTION_END();
+_SECTION_BEGIN("S3");
+P=Ref(C,-15);
+Hp=30;
+aa = LinRegIntercept(P,Hp); 
+bb = LinRegSlope(P,Hp); 
+res=C-(aa + bb *Ref(C,-1)); 
+B3=(res<LLV(res,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S3 =(res>HHV(res,30)*0.99 AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B3=ExRem(B3,S3);
+S3=ExRem(S3,B3);
+Short = S3;
+Cover = B3;
+_SECTION_END();
+_SECTION_BEGIN("S4");
+CHL = Max(C,15 )-Min(C,15);
+OHL = Max(O,15)-Min (O,15);
+ratio=CHL/OHL;
+B4=(ratio<0.9985 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S4 =(ratio>1.0015  AND (C/Ref(C,-5))>1.015);
+B4=ExRem(B4,S4);
+S4=ExRem(S4,B4);
+Short = S4;
+Cover = B4;
+_SECTION_END();
+_SECTION_BEGIN("S5");
+ pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+m=(H+C+O+L)/4;
+std=(m-MA(m,10))/StDev(m,10);
+wave=atan(std)*RTD;
+B5=(Cross(wave,-62) AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S5=(Cross(62,wave)  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B5=ExRem(B5,S5);
+S5=ExRem(S5,B5);
+Short = S5;
+Cover = B5;
+_SECTION_END();
+_SECTION_BEGIN("S6");
+Longbar =15;
+shortbar=5;
+MAH = MA(Max(H,Longbar ),shortbar);
+MAL = MA(Min(L,Longbar ),shortbar);
+spread = MAH - MAL;
+r=(spread-MA(spread,shortbar))/StDerr(spread,shortbar);
+B6=(r<LLV(r,30)*0.99  AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S6=(r>HHV(r,30)*0.99  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B6=ExRem(B6,S6);
+S6=ExRem(S6,B6);
+Short = S6;
+Cover = B6;
+_SECTION_END();
+_SECTION_BEGIN("S7");
+N=15;
+CS = LinRegSlope(C, N);
+CI=LinRegIntercept(C, N);
+y=CI+CS*Ref(C,-1);
+s=y-C;
+B7=(s<LLV(s,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S7=(s>HHV(s,30)*0.99 AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B7=ExRem(B7,S7);
+S7=ExRem(S7,B7);
+Short = S7;
+Cover = B7;
+_SECTION_END();
+_SECTION_BEGIN("S8");
+m=Ref((H+C+L+O)/4,-1);
+CS = LinRegSlope(m, 30);
+CI=LinRegIntercept(m, 30);
+y=m-(CI+CS*m);
+z=(y-MA(y,30))/StdErr(y,30);
+B8=(z<LLV(z,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S8=(z>HHV(z,30)*0.99  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B8=ExRem(B8,S8);
+S8=ExRem(S8,B8);
+Short = S8;
+Cover = B8;
+_SECTION_END();
+_SECTION_BEGIN("S9");
+Index="NDX-NASDAQ-IND-USD";
+Hp=10;
+Lp=1;
+Longbar =20;
+shortbar=5;
+P=Foreign(index,"C",Lp);
+Correl=Correlation(P,C,Hp);
+B9=(Cross(Correl,0.20) AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S9=(Cross(0.95,Correl)  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B9=ExRem(B9,S9);
+S9=ExRem(S9,B9);
+Short = S9;
+Cover = B9;
+_SECTION_END();
+_SECTION_BEGIN("S10");
+function TTF( periods )
+{
+	BuyPower = HHV( High, periods ) - Ref( LLV( Low, periods ), -periods );
+	SellPower = Ref( HHV( High, periods ), -periods ) - LLV( Low, periods );
+	return 100 * (BuyPower - SellPower) / (0.5 * (BuyPower + SellPower));
+}
+
+tt = TTF(15);
+UCL =HHV(tt,60);
+LCL =LLV(tt,60);
+B10=(tt<LLV(tt,30)*0.99 AND (Ref(C,-5)-C)>0.02  AND abs(C-O)<abs(Ref((C-0),-1)));
+S10=(tt>HHV(tt,30)*0.99  AND (C-Ref(C,-5))>0.02 AND abs(H-C)<abs(Ref((H-C),-1)));
+B10=ExRem(B10,S10);
+S10=ExRem(S10,B10);
+Short = S10;
+Cover = B10;
+Filter =B10 OR S10;
+_SECTION_END();
+
+Buy= (B1 OR B2 OR B3 OR B4 OR B5 OR B6 OR B7 OR B8 OR B9 OR B10);
+Sell=(S1 OR S2 OR S3 OR S4 OR S5 OR S6 OR S7 OR S8 OR B9 OR S10);
+Short = Sell;
+Cover = Buy;
+Plot(C, "Combined Strategy ## S1 to S10", colorWhite, 4);
+PlotShapes( Buy* shapeUpArrow , colorGreen, 0);
+PlotShapes( Sell* shapeDownArrow , colorBlue, 0);
+
+
+
+
+///////// 
+Version( 5.04 ); // requires 5.04 or higher
+GfxSetOverlayMode( 0 );
+ 
+MaxTradeSize = Param("Max Trade Value", 2000, 1000, 10000, 200);
+MaxShares = Param("Max Shares", 100, 50, 200, 10);
+EnforceTargetOrder = ParamToggle("Enforce Target Order", "No|Yes", 0);
+EnforceStopLossOrder = ParamToggle("Enforce Stop Loss Order", "No|Yes", 1);
+MaxRiskAmount = Param("Max Risk Amt $", 100, 1, 1500, 10);
+EnforceMaxRiskAmt = ParamToggle("Enforce Max Risk Amt", "No|Yes", 1);
+AddCancelMktOrder = ParamToggle("Add Cancel Mkt Order", "No|Yes", 1);
+TransmitAlwaysOn = ParamToggle("Xmit Always On", "No|Yes", 1);
+pAllowAddingToPosition = ParamToggle("Xmit Always On", "No|Yes", 0);
+ 
+ 
+CellHeight = 20;
+CellWidth = 60;
+State = "";
+ 
+sTevSymbol = Name() + "_";
+sTevVisible = sTevSymbol + "Visible";
+sTevState = sTevSymbol + "State";
+sTevOrderType = sTevSymbol + "OrderType";
+sTevOrderDesc = sTevSymbol + "OrderDesc";
+sTevTargetPrice = sTevSymbol + "TargetPrice";
+sTevStopLossPrice = sTevSymbol + "StopLossPrice";
+sTevEntryPrice = sTevSymbol + "EntryPrice";
+sTevShares = sTevSymbol + "Shares";
+sTevTransmit = sTevSymbol + "TransmitState";
+sTevMessage = sTevSymbol + "Message";
+sTevPriceSelectState = sTevSymbol + "PriceSelect";
+ 
+sTevOrderSymbol = sTevSymbol + "OrderSymbol";
+sTevOrderShares = sTevSymbol + "OrderShares";
+sTevOrderParentId = sTevSymbol + "OrderParentId";
+sTevOrderTargetId = sTevSymbol + "OrderTargetId";
+sTevOrderStopLossId = sTevSymbol + "OrderStopLossId";
+ 
+ 
+sPriceSelectType_Entry = "ENTRY";
+sPriceSelectType_StopLoss = "SLOSS";
+sPriceSelectType_Target = "TGT";
+sPriceSelectType_None = "";
+ 
+sOrderType_BuyAtMarket = "BUY";
+sOrderType_ShortAtMarket = "SELL";
+sOrderType_BuyAtStop = "B STOP";
+sOrderType_ShortAtStop = "S STOP";
+sOrderType_BuyAtLimit = "B LIM";
+sOrderType_ShortAtLimit = "S LIM";
+sOrrderType_None = "NA";
+ 
+sStateType_OrderPrep = "Prep";
+sStateType_OrderReady = "Ready";
+sStateType_OrderNone = "None";
+sStateType_OrderSent = "Sent";
+ 
+sTransmitType_No = "No";
+sTransmitType_Yes = "Yes";
+ 
+function formatPriceForSecurityType( inputPrice )
+{
+    OutputPrice = -1;
+ 
+    if ( inputPrice > 0 )
+    {
+        OutputPrice = inputPrice;
+ 
+        if ( StrFind( Name(), " A0-FX" ) )
+        {
+            //format price for forex
+        }
+        else
+            if ( StrFind( Name(), " #F" ) )
+            {
+                //format price for futures
+            }
+            else
+            {
+                //format price for stock
+                OutputPrice = int( inputPrice * 100 ) / 100;
+            }
+    }
+ 
+    return OutputPrice;
+}
+ 
+function CalculateShares()
+{
+    Shares = int(MaxTradeSize/Close[BarCount-1]);
+ 
+    if (Shares > MaxShares)
+    {
+        Shares = int(MaxShares);
+    }
+ 
+    return Shares;
+}
+ 
+function CalculateSharesByRiskAmount()
+{
+    Shares = 0;
+ 
+    Entry = StaticVarGet(sTevEntryPrice); 
+    StopLoss = StaticVarGet(sTevStopLossPrice); 
+    Target = StaticVarGet(sTevTargetPrice); 
+     
+    ORderType = StaticVarGetText(sTevOrderType);
+    if (ORderType == sOrderType_BuyAtMarket || ORderType == sOrderType_ShortAtMarket)
+    {
+        Entry = Close[BarCount-1];
+    }
+ 
+ 
+    if (IsNull(Entry))
+        Entry = -999;
+    if (IsNull(StopLoss ))
+        StopLoss = -999;
+    if (IsNull(Target ))
+        Target = -999;
+     
+    if (Entry != -999 && StopLoss != -999)
+    {
+        //MaxRiskAmount 
+        RiskAmtPerShare = abs(Entry - StopLoss);
+ 
+        Shares = int(MaxRiskAmount / RiskAmtPerShare);
+ 
+        TradeSize = Close[BarCount-1] * Shares;
+ 
+        if (TradeSize > MaxTradeSize)
+        {
+            Shares = int(MaxTradeSize/Close[BarCount-1]);
+        }
+         
+        if (Shares > MaxShares)
+        {
+            Shares = int(MaxShares);
+        }
+ 
+    }
+ 
+    return Shares;
+}
+ 
+function GetTransmitBool()
+{
+    xmit = False;
+ 
+    xmitstate = StaticVarGetText( sTevTransmit );
+ 
+    if ( xmitstate == sTransmitType_Yes )
+        xmit = True;
+ 
+    return xmit;
+}
+ 
+function ClearState()
+{
+    StaticVarSetText(sTevState, sStateType_OrderNone);
+    StaticVarRemove(sTevOrderType);
+    StaticVarRemove(sTevOrderDesc);
+    StaticVarRemove(sTevTargetPrice);
+    StaticVarRemove(sTevStopLossPrice);
+    StaticVarRemove(sTevEntryPrice);
+    StaticVarRemove(sTevTransmit);
+ 
+ 
+    StaticVarSetText(sTevTransmit, sTransmitType_No);
+    StaticVarSetText(sTevPriceSelectState, sPriceSelectType_None);
+    StaticVarSetText(sTevMessage, "");
+ 
+}
+ 
+function CheckOrder()
+{
+    CheckedValid = True;
+    message = "";
+ 
+    StaticVarSetText(sTevPriceSelectState, sPriceSelectType_None);
+    ORderType = StaticVarGetText(sTevOrderType);
+    Entry = StaticVarGet(sTevEntryPrice); 
+    StopLoss = StaticVarGet(sTevStopLossPrice); 
+    Target = StaticVarGet(sTevTargetPrice); 
+ 
+    if (IsNull(Entry))
+        Entry = -999;
+    if (IsNull(StopLoss ))
+        StopLoss = -999;
+    if (IsNull(Target ))
+        Target = -999;
+ 
+    if (ORderType == "")
+    {
+        message = "No Order";
+        CheckedValid = False;
+    }
+    else
+    {
+         
+        if (ORderType == sOrderType_BuyAtMarket || ORderType ==
+sOrderType_ShortAtMarket)
+        {
+            Entry = Close[BarCount-1];
+        }
+        else if (Entry == -999)
+        {
+            message +=  ": BAD ENTRY";
+            CheckedValid = False;
+        }
+         
+        if (StopLoss == -999 && EnforceStopLossOrder == 1)
+        {
+            message +=  " : BAD ST LOSS";
+            CheckedValid = False;
+        }
+        if (Target == -999 && EnforceTargetOrder == 1)
+        {
+            message += " : BAD TGT";
+            CheckedValid = False;
+        }
+         
+        if (CheckedValid)
+        {
+            if (ORderType == sOrderType_BuyAtMarket || ORderType == sOrderType_BuyAtStop || ORderType == sOrderType_BuyAtLimit)
+            {
+                if (Entry > Target && EnforceTargetOrder == 1)
+                {
+                    message += " : ENTRY > TGT";
+                    CheckedValid = False;                   
+                }
+                if (StopLoss > Entry && EnforceStopLossOrder == 1)
+                {
+                    message += " : ST LOSS > ENTRY";
+                    CheckedValid = False;                   
+                }
+                if (StopLoss > Target && EnforceStopLossOrder == 1  && EnforceTargetOrder == 1)
+                {
+                    message += " : ST LOSS > TGT";
+                    CheckedValid = False;                   
+                }
+            }
+            else if (ORderType == sOrderType_ShortAtMarket || ORderType == sOrderType_ShortAtStop || ORderType == sOrderType_ShortAtLimit)
+            {
+                if (Entry < Target && EnforceTargetOrder == 1)
+                {
+                    message += " : ENTRY < TGT";
+                    CheckedValid = False;                   
+                }
+                if (StopLoss < Entry && EnforceStopLossOrder == 1)
+                {
+                    message += " : ST LOSS < ENTRY";
+                    CheckedValid = False;                   
+                }
+                if (StopLoss < Target && EnforceStopLossOrder == 1  && EnforceTargetOrder == 1)
+                {
+                    message += " : ST LOSS < TGT";
+                    CheckedValid = False;                   
+                }
+            }
+        }
+        //message = ORdertype + " " + NumToStr(int(MaxShares)) + " @ " + NumToStr(Entry) 
+        //          + ", SL @ " + NumToStr(StopLoss)
+        ///         + ", TG @ " + NumToStr(Target);
+    }
+ 
+    if (CheckedValid)
+        message = "VALID ORDER";
+ 
+    StaticVarSetText(sTevMessage, message);
+    return CheckedValid;
+ 
+}
+ 
+function GetOrderDirection(ORderType, entryOrderType)
+{
+    ORderdirction = "";
+ 
+    if ( entryOrderType == "" )
+    {
+        if ( ORderType == sOrderType_BuyAtMarket || ORderType == sOrderType_BuyAtStop || ORderType == sOrderType_BuyAtLimit )
+        {
+            ORderdirction = "BUY";
+        }
+        else if ( ORderType == sOrderType_ShortAtMarket || ORderType == sOrderType_ShortAtStop || ORderType == sOrderType_ShortAtLimit )
+        {
+            ORderdirction = "SELL";
+        }
+    }
+    else
+   {
+        if ( entryOrderType == "BUY" )
+       {
+        ORderdirction = "SELL";
+       }
+       else if ( entryOrderType == "SELL" )
+       {
+        ORderdirction = "BUY";
+       }
+    }
+ 
+    return ORderdirction;
+}
+ 
+ 
+function GetOrderType(ORderType, entryOrderType)
+{
+    RtnORderType = "";
+     
+    if (entryOrderType == "")
+    {
+        if ( ORderType == sOrderType_BuyAtMarket || ORderType == sOrderType_ShortAtMarket )
+            RtnORderType = "MKT";
+        else if ( ORderType == sOrderType_BuyAtStop || ORderType == sOrderType_ShortAtStop )
+            RtnORderType = "STP";
+        else if ( ORderType == sOrderType_BuyAtLimit || ORderType == sOrderType_ShortAtLimit )
+            RtnORderType = "LMT";
+    }
+    else
+    {
+       if ( ORderType == sOrderType_BuyAtMarket || ORderType == sOrderType_ShortAtMarket )
+            RtnORderType = "MKT";
+       else if ( ORderType == sOrderType_BuyAtStop || ORderType == sOrderType_ShortAtStop )
+           RtnORderType = "STP";
+       else if ( ORderType == sOrderType_BuyAtLimit || ORderType == sOrderType_ShortAtLimit )
+           RtnORderType = "MIT";
+    }
+ 
+    return RtnORderType ;
+}
+ 
+function SendOrder()
+{
+    if (CheckOrder())
+    {
+        StaticVarSetText(sTevPriceSelectState, sPriceSelectType_None);
+        ORderSymbol = Name();
+        ORderType = StaticVarGetText(sTevOrderType);
+        Entry = formatPriceForSecurityType(StaticVarGet(sTevEntryPrice)); 
+        StopLoss = formatPriceForSecurityType(StaticVarGet(sTevStopLossPrice)); 
+        Target = formatPriceForSecurityType(StaticVarGet(sTevTargetPrice));
+        Shares = StaticVarGet(sTevShares);
+        //Shares = CalculateShares();
+        MasterXMit = GetTransmitBool();
+ 
+        ORderIBType = GetOrderType(ORderType, "");
+        ORderIBDirection = GetOrderDirection(ORderType, "");
+ 
+        SLOrderIBType = GetOrderType(sOrderType_BuyAtStop, ORderType);
+        SLOrderIBDirection = GetOrderDirection(ORderType, ORderIBDirection);
+         
+        TGOrderIBType = GetOrderType(sOrderType_BuyAtLimit, ORderType);
+        TGOrderIBDirection = GetOrderDirection(ORderType, ORderIBDirection);
+ 
+        parentOrderId = 0;
+        targetOrderId = 0;
+        stoplossOrderId = 0;
+ 
+        ibc = GetTradingInterface("IB"); 
+ 
+        // check if we are connected OK 
+        if( ibc.IsConnected() ) 
+        {   
+            // check if we do not have already open position on this stock 
+            if( ibc.GetPositionSize( Name() ) == 0  ||  pAllowAddingToPosition == 1)
+ 
+            { 
+                doXmit = False;
+ 
+                if (EnforceStopLossOrder == 0  && EnforceTargetOrder == 0)
+                {
+                    doXmit = True && MasterXMit;
+                }
+ 
+                // transmit order
+                if (ORderIBType == "LMT")
+                    parentOrderId = ibc.PlaceOrder( ORderSymbol, ORderIBDirection, Shares, ORderIBType, Entry, 0, "GTC", doXmit, 0, "ignoreRth" ); 
+                else if (ORderIBType == "STP")
+                    parentOrderId = ibc.PlaceOrder( ORderSymbol, ORderIBDirection, Shares, ORderIBType, 0, Entry, "GTC", doXmit, 0, "ignoreRth" ); 
+                else if (ORderIBType == "MKT")
+                    parentOrderId = ibc.PlaceOrder( ORderSymbol, ORderIBDirection, Shares, ORderIBType, 0, 0, "GTC", doXmit, 0, "ignoreRth" ); 
+ 
+                if (EnforceTargetOrder == 1  || Target > 0)
+                {
+                    if (EnforceStopLossOrder == 0)
+                        doXmit = True && MasterXMit;
+ 
+                targetOrderId = ibc.PlaceOrder( ORderSymbol, TGORderIBDirection, Shares, TGORderIBType, 0, Target, 
+                                                            "GTC", doXmit, 100, "", parentOrderId, ORderSymbol + "_GRP"  );
+ 
+                }
+                if (EnforceStopLossOrder == 1 || StopLoss > 0)
+                {
+                    doXmit = True && MasterXMit;
+                    stoplossOrderId = ibc.PlaceOrder(ORderSymbol, SLORderIBDirection, Shares, SLORderIBType, 0, StopLoss, 
+                                                            "GTC", doXmit, 100, "", parentOrderId, ORderSymbol + "_GRP" );
+ 
+                }
+ 
+                if (AddCancelMktOrder == 1)
+                {
+                    MktOrderIBType = GetOrderType(sOrderType_BuyAtMarket, ORderType);
+                    MktOrderIBDirection = GetOrderDirection(ORderType, ORderIBDirection);
+ 
+                    ibc.PlaceOrder( ORderSymbol, MktOrderIBDirection, Shares, MktOrderIBType, 0, 0, "GTC", False, 0, "ignoreRth" );
+                }
+            } 
+        }
+    }
+}
+ 
+function SetState(sstate)
+{
+    StaticVarSetText(sTevState, sstate);
+}
+ 
+function PrintInCell( string, row, Col )
+{
+    GfxDrawText( NumToStr( Close[BarCount-1] ) + string, Col * CellWidth, row * CellHeight, ( Col + 1 ) * CellWidth, ( row + 1 ) * CellHeight, 0 );
+}
+ 
+function DrawButton2( col, row, buttonColor, textColor, height, width, text, bold, outlineType, span)
+{
+    GfxSetBkMode(1);
+     
+    if (text == "{EMPTY}")
+        text = "";
+ 
+    x1 = col * width;
+    y1 = row * height;
+    x2 = ( col + span ) * width-3;
+    y2 = ( row + 1 ) * height-3;
+    OutlineWidth = 3;
+  
+    GfxGradientRect( x1, y1, x2, y2, buttonColor, buttonColor);
+ 
+    GfxSetTextColor(TextColor);
+ 
+    weight = 400;
+    if (bold == True)
+        weight = 800;
+ 
+    GfxSelectFont( "Tahoma", height/ 2.5, weight);
+ 
+    GfxDrawText( text, x1 + 5, y1 + 2.5, x2, y2, 0 );
+ 
+    if (outlineType == 0)
+    {
+        GfxSelectPen(colorGrey50, 3 );
+        GfxMoveTo( x1, y2);
+        GfxLineTo( x2 - 1, y2 );
+        GfxLineTo( x2 - 1, y1 + 1);
+    }
+    else if (OutlineType == 1)
+    {
+        GfxSelectPen(colorBlack, 2 );
+        GfxMoveTo( x1, y2);
+        GfxLineTo( x2 - 1, y2 );
+        GfxLineTo( x2 - 1, y1 + 1);
+        GfxLineTo( x1, y1 + 1);
+        GfxLineTo( x1, y2);
+    }
+    else if (OutlineType == 2)
+    {
+        GfxSelectPen(colorRed, 2 );
+        GfxMoveTo( x1, y2);
+        GfxLineTo( x2 - 1, y2 );
+        GfxLineTo( x2 - 1, y1 + 1);
+        GfxLineTo( x1, y1 + 1);
+        GfxLineTo( x1, y2);
+    }
+}
+ 
+function DrawButton( px, py, Clr1, Clr2, text )
+{
+    Col = floor( px / CellWidth );
+    Row = floor( py / CellHeight );
+ 
+ 
+    GfxGradientRect( Col * CellWidth, row * CellHeight, ( Col + 1 ) *CellWidth, ( row + 1 ) * CellHeight,
+                     Clr1, Clr2 );
+ 
+    PrintInCell( text + " " + row + "," + Col, row, Col );
+ 
+}
+ 
+function OnLMouseButton( x, y, px, py )
+{
+    priceSelectState = StaticVarGetText(sTevPriceSelectState);
+ 
+    if (priceSelectState == sPriceSelectType_Entry)
+    {
+        StaticVarSet(sTevEntryPrice, formatPriceForSecurityType(y));
+    }
+    else    if (priceSelectState == sPriceSelectType_StopLoss)
+    {
+        StaticVarSet(sTevStopLossPrice, formatPriceForSecurityType(y));
+    }
+    else    if (priceSelectState == sPriceSelectType_Target)
+    {
+        StaticVarSet(sTevTargetPrice, formatPriceForSecurityType(y));
+    }
+}
+ 
+function OnRMouseButton( x, y, px, py )
+{
+    x = 0;
+}
+ 
+function OnMMouseButton( x, y, px, py )
+{
+    x = 0;
+}
+ 
+function OnHoverMouse( x, y, px, py )
+{
+    x = 0;
+}
+ 
+function OnLButtonIsDown( x, y, px, py )
+{
+    x = 0;
+}
+ 
+function EventHandler()
+{
+    local b, x, y, px, py;
+    b = GetCursorMouseButtons();
+ 
+// retrieve co-ordinates in date/value units
+    x = GetCursorXPosition( 0 );
+    y = GetCursorYPosition( 0 );
+ 
+// retrieve co-ordinates in pixel units
+    px = GetCursorXPosition( 1 );
+    py = GetCursorYPosition( 1 );
+ 
+    Col = floor( px / CellWidth );
+    Row = floor( py / CellHeight );
+ 
+    printf("\nButton: %g, %g, %g", Col, Row, StaticVarGet(sTevVisible)); //StaticVarSet(sTevVisible, 1);
+    if ( StaticVarGet(sTevVisible) != 1)
+    {
+        if ((Col == 0 || Col == 1) && Row == 1 &&  b & 8 &&  b & 1)
+        {
+            StaticVarSet(sTevVisible, 1);
+            //ClearState();
+            //SetState(sStateType_OrderPrep);
+            //StaticVarSetText(sTevOrderType, sOrderType_BuyAtMarket);
+            //StaticVarSet(sTevEntryPrice, Close[BarCount-1]);
+        }
+ 
+    }
+    ///////////////////////////////////////////////////////////
+    else if (Col == 0 && Row == 1 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSet(sTevVisible, 0);
+    }
+    else if (Col == 1 && Row == 1 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", sOrderType_BuyAtMarket);
+        ClearState();
+        SetState(sStateType_OrderPrep);
+        StaticVarSetText(sTevOrderType, sOrderType_BuyAtMarket);
+        StaticVarSet(sTevEntryPrice, Close[BarCount-1]);
+    }
+    else if (Col == 2 && Row == 1 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", sOrderType_ShortAtMarket);
+        ClearState();
+        SetState(sStateType_OrderPrep);
+        StaticVarSetText(sTevOrderType, sOrderType_ShortAtMarket);
+        StaticVarSet(sTevEntryPrice, Close[BarCount-1]);
+    }
+    else if (Col == 3 && Row == 1 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", sOrderType_BuyAtStop);
+        ClearState();
+        SetState(sStateType_OrderPrep);
+        StaticVarSetText(sTevOrderType, sOrderType_BuyAtStop);
+    }   
+    else if (Col == 4 && Row == 1 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", sOrderType_ShortAtStop);
+        ClearState();
+        SetState(sStateType_OrderPrep);
+        StaticVarSetText(sTevOrderType, sOrderType_ShortAtStop);
+    }
+    else if (Col == 5 && Row == 1 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", sOrderType_BuyAtLimit);
+        ClearState();
+        SetState(sStateType_OrderPrep);
+        StaticVarSetText(sTevOrderType, sOrderType_BuyAtLimit);
+    }
+    else if (Col == 6 && Row == 1 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", sOrderType_ShortAtLimit);
+        ClearState();
+        SetState(sStateType_OrderPrep);
+        StaticVarSetText(sTevOrderType, sOrderType_ShortAtLimit);
+    }
+ 
+    ///////////////////////////////////////////////////
+    else if (Col == 2 && Row == 7 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", "CLEAR");
+        ClearState();
+    }
+    else if (Col == 4 && Row == 4 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", "PSEL");
+        StaticVarSetText(sTevPriceSelectState, sPriceSelectType_None);
+    }
+    else if (Col == 3 && Row == 7 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", "SEND");
+        SendOrder();
+    }
+    else if (Col == 0 && Row == 3 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", "ENTRY");
+        StaticVarSetText(sTevPriceSelectState, sPriceSelectType_Entry);
+    }
+    else if (Col == 0 && Row == 4 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", "ST LOSS");
+        StaticVarSetText(sTevPriceSelectState, sPriceSelectType_StopLoss);
+    }
+    else if (Col == 0 && Row == 5 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", "TGT");
+        StaticVarSetText(sTevPriceSelectState, sPriceSelectType_Target);
+    }
+    else if ((Col == 0 || Col == 1) && Row == 7 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", "CHK ODR");
+        //StaticVarSetText(sTevPriceSelectState, sPriceSelectType_Target);
+        CheckOrder();
+    }
+    else if (Col == 2 && Row == 2 &&  b & 8 &&  b & 1)
+    {
+        StaticVarSetText("TE_Button", "XMIT");
+     
+        xmitstate = StaticVarGetText(sTevTransmit);
+        if (xmitstate == sTransmitType_No || xmitstate == "")
+            StaticVarSetText(sTevTransmit, sTransmitType_Yes);
+        else
+            StaticVarSetText(sTevTransmit, sTransmitType_No);
+    }
+ 
+    else if ( b & 8 ) // flag = 8 is set when window just received mouse click
+    {
+        // not-null means clicked in THIS (current) window
+        if ( b & 1 )
+            OnLMouseButton( x, y, px, py );
+ 
+        if ( b & 2 )
+            OnRMouseButton( x, y, px, py );
+ 
+        if ( b & 4 )
+            OnMMouseButton( x, y, px, py );
+    }
+    else
+    {
+        //if( b == 0 ) OnHoverMouse( x, y, px, py ); // no button pressed
+        if ( b == 1 )
+            OnLButtonIsDown( x, y, px, py ); // button pressed
+    }
+}
+ 
+ 
+EventHandler();
+//RequestTimedRefresh( 1 );
+ 
+if ( StaticVarGet(sTevVisible) == 1)
+    DrawButton2( 0, 1, colorBlack, colorWhite, CellHeight, CellWidth, "HIDE",True, 0, 1 );
+else
+    DrawButton2( 0, 1, colorBlack, colorWhite, CellHeight, CellWidth, "SHOWTRADING", True, 0, 2  );
+ 
+if ( StaticVarGet(sTevVisible) == 1)
+{
+ 
+    if (TransmitAlwaysOn == 1)
+        StaticVarSetText(sTevTransmit, sTransmitType_Yes);
+ 
+    DrawButton2( 1, 1, colorBlack, colorWhite, CellHeight, CellWidth, "BUY",True, 0, 1 );
+    DrawButton2( 2, 1, colorBlack, colorWhite, CellHeight, CellWidth, "SELL",True, 0, 1 );
+    DrawButton2( 3, 1, colorBlack, colorWhite, CellHeight, CellWidth, "B STOP",True, 0, 1 );
+    DrawButton2( 4, 1, colorBlack, colorWhite, CellHeight, CellWidth, "S STOP",True, 0, 1 );
+    DrawButton2( 5, 1, colorBlack, colorWhite, CellHeight, CellWidth, "B LIM",True, 0, 1 );
+    DrawButton2( 6, 1, colorBlack, colorWhite, CellHeight, CellWidth, "S LIM",True, 0, 1 );
+ 
+    DrawButton2( 4, 2, colorBlack, colorWhite, CellHeight, CellWidth, "STATE",True, 2, 1 );
+    DrawButton2( 5, 2, colorGrey50, colorWhite, CellHeight, CellWidth,StaticVarGetText( sTevState ), True, 1, 1 );
+ 
+    DrawButton2( 4, 3, colorBlack, colorWhite, CellHeight, CellWidth, "BTN",True, 2, 1 );
+    DrawButton2( 5, 3, colorGrey50, colorWhite, CellHeight, CellWidth,StaticVarGetText( "TE_Button" ), True, 1, 1 );
+ 
+    DrawButton2( 4, 4, colorBlack, colorWhite, CellHeight, CellWidth, "PSEL",True, 2, 1 );
+    DrawButton2( 5, 4, colorGrey50, colorWhite, CellHeight, CellWidth,StaticVarGetText( sTevPriceSelectState ), True, 1, 1 );
+ 
+    DrawButton2( 0, 2, colorBlack, colorWhite, CellHeight, CellWidth, "O TYPE",True, 0, 1 );
+    DrawButton2( 1, 2, colorGrey50, colorWhite, CellHeight, CellWidth,StaticVarGetText( sTevOrderType ), True, 1, 1 );
+    DrawButton2( 2, 2, colorBlack, colorWhite, CellHeight, CellWidth, "XMIT",True, 0, 1 );
+    DrawButton2( 3, 2, colorGrey50, colorWhite, CellHeight, CellWidth,StaticVarGetText( sTevTransmit ), True, 1, 1 );
+ 
+    Shares = 0;
+ 
+    if ( EnforceMaxRiskAmt == 1 )
+    {
+        Shares = CalculateSharesByRiskAmount();
+        StaticVarSet( sTevShares, Shares );
+    }
+    else
+    {
+        Shares = CalculateShares();
+        StaticVarSet( sTevShares, Shares );
+    }
+ 
+    DrawButton2( 2, 3, colorBlack, colorWhite, CellHeight, CellWidth, "SHARES",True, 0, 1 );
+ 
+    DrawButton2( 3, 3, colorGrey50, colorWhite, CellHeight, CellWidth,NumToStr( Shares, 5 ), True, 1, 1 );
+ 
+    DrawButton2( 0, 3, colorBlack, colorWhite, CellHeight, CellWidth, "ENTRY",True, 0, 1 );
+    DrawButton2( 1, 3, colorGrey50, colorWhite, CellHeight, CellWidth,NumToStr( StaticVarGet( sTevEntryPrice ), 0.2 ), True, 1, 1 );
+ 
+    DrawButton2( 0, 4, colorBlack, colorWhite, CellHeight, CellWidth, "STLOSS", True, 0, 1 );
+    DrawButton2( 1, 4, colorGrey50, colorWhite, CellHeight, CellWidth,NumToStr( StaticVarGet( sTevStopLossPrice ), 0.2 ), True, 1, 1 );
+ 
+    DrawButton2( 0, 5, colorBlack, colorWhite, CellHeight, CellWidth, "TGT",True, 0, 1 );
+    DrawButton2( 1, 5, colorGrey50, colorWhite, CellHeight, CellWidth,NumToStr( StaticVarGet( sTevTargetPrice ), 0.2 ), True, 1, 1 );
+ 
+    DrawButton2( 0, 6, colorBlack, colorWhite, CellHeight, CellWidth,"Message", True, 0, 1 );
+    DrawButton2( 1, 6, colorGrey50, colorWhite, CellHeight, CellWidth,StaticVarGetText( sTevMessage ), False, 1, 5 );
+ 
+    DrawButton2( 0, 7, colorBlack, colorWhite, CellHeight, CellWidth, "CHECKORDER", True, 0, 2 );
+    DrawButton2( 2, 7, colorBlack, colorWhite, CellHeight, CellWidth, "CLEAR",True, 0, 1 );
+    DrawButton2( 3, 7, colorBlack, colorWhite, CellHeight, CellWidth, "SEND",True, 0, 1 );
+ 
+    Plot( StaticVarGet( sTevEntryPrice ), "ENTRY",  colorBlue, styleLine |styleDashed | styleNoTitle );
+    Plot( StaticVarGet( sTevStopLossPrice ), "SL",  colorRed, styleLine |styleDashed | styleNoTitle );
+    Plot( StaticVarGet( sTevTargetPrice ), "TGT",  colorGreen, styleLine |styleDashed | styleNoTitle );
+}
+_SECTION_END();

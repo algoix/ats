@@ -1,0 +1,114 @@
+
+ 
+//BID-ASK
+spread=(GetRTData("Ask")-GetRTData("Bid"));
+FQ=spread;
+BP=GetRTData("Bid")+FQ*0.25;
+SP=GetRTData("Ask")-FQ*0.25;
+//STRATEGY
+flag=C>O AND Ref(O,-1)>Ref(C,-1) AND C>Ref(C,-1) AND (O-C)<Ref((O-C),-1) AND (Ref(C,-5)/C)>0.0001;
+sflag=O>C AND Ref(O,-1)>Ref(C,-1) AND O>Ref(O,-1) AND (C-O)<Ref((C-O),-1) AND  (C/Ref(C,-5))>0.0001;
+
+Index="NDX-NASDAQ-IND-USD";
+P=Foreign(Index,"C",1);
+pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+r=ln(O/Ref(O,-15));
+z=(O-MA(O,15))/(StdErr(O,15)*sqrt(15));
+m=(H+C+O+L)/4;
+std=(m-MA(m,15))/(Stderr(m,15)*sqrt(15));
+CS = LinRegSlope(m, 15);
+CI=LinRegIntercept(m, 15);
+y=m-(CI+CS*m);
+aa = LinRegIntercept(r,15); 
+bb = LinRegSlope(r,15);
+CHL = Max(C,15 )-Min(C,15);
+OHL = Max(O,15)-Min (O,15);
+MAH = MA(Max(15,O ),5);
+MAL = MA(Min(15,O ),5);
+spread = MAH - MAL;
+CS = LinRegSlope(O,15 );
+CI=LinRegIntercept(O,15);
+y=CI+CS*Ref(O,-1);
+function TTF( periods )
+{
+	BuyPower = HHV( High, periods ) - Ref( LLV( Low, periods ), -periods );
+	SellPower = Ref( HHV( High, periods ), -periods ) - LLV( Low, periods );
+	return 100 * (BuyPower - SellPower) / (0.5 * (BuyPower + SellPower));
+}
+s1=atan(r)*DTR;
+s2=atan(z)*DTR;
+s3=r-(aa + bb *Ref(r,-1)); 
+s4=CHL/OHL;
+s5=atan(std)*DTR;
+s6=(spread-MA(spread,5))/(Stderr(spread,5)*sqrt(5));
+s7=y-C;
+s8=(y-MA(y,30))/(StdErr(y,30)*sqrt(15));
+s9=Correlation(P,C,15)-Ref(Correlation(P,C,15),-5);
+s10= TTF(15);
+
+bu1=Cross(LLV(s1,30)*0.99,s1);
+bu2=Cross(LLV(s2,30)*0.99,s2);
+bu3=Cross(LLV(s3,30)*0.99,s3);
+bu4=Cross(0.9985,s4);
+bu5=Cross(LLV(s5,30)*0.99,s5);
+bu6=Cross(LLV(s6,30)*0.99,s6);
+bu7=Cross(LLV(s7,30)*0.99,s7) ;
+bu8=Cross(LLV(s8,30)*0.99,s8); 
+bu9=Cross(LLV(s9,30)*0.99,s9); 
+bu10=Cross(LLV(s10,30)*0.99,s10);
+
+se1=Cross(s1,HHV(s1,30)*0.99) ;
+se2=Cross(s2,HHV(s2,30)*0.99);
+se3=Cross(s3,HHV(s3,30)*0.99);
+se4=Cross(s4,1.0015);
+se5=Cross(s5,HHV(s5,30)*0.99);
+se6=Cross(s6,HHV(s6,30)*0.99);
+se7=Cross(s7,HHV(s7,30)*0.99);
+se8=Cross(s8,HHV(s8,30)*0.99);
+se9=Cross(s9,HHV(s9,30)*0.99);
+se10=Cross(s10,HHV(s10,30)*0.99);
+
+bv1=ValueWhen(bu1,C,1);
+bv2=ValueWhen(bu2,C,1);
+bv3=ValueWhen(bu3,C,1);
+bv4=ValueWhen(bu4,C,1);
+bv5=ValueWhen(bu5,C,1);
+bv6=ValueWhen(bu6,C,1);
+bv7=ValueWhen(bu7,C,1);
+bv8=ValueWhen(bu8,C,1);
+bv9=ValueWhen(bu9,C,1);
+bv10=ValueWhen(bu10,C,1);
+
+sv1=ValueWhen(se1,C,1);
+sv2=ValueWhen(se2,C,1);
+sv3=ValueWhen(se3,C,1);
+sv4=ValueWhen(se4,C,1);
+sv5=ValueWhen(se5,C,1);
+sv6=ValueWhen(se6,C,1);
+sv7=ValueWhen(se7,C,1);
+sv8=ValueWhen(se8,C,1);
+sv9=ValueWhen(se9,C,1);
+sv10=ValueWhen(se10,C,1);
+
+//if(bv1<bv2 OR bv1<bv3 OR bv1<bv4 OR bv1<bv5 OR bv1<bv6 OR bv1<bv7 OR bv1<bv8 OR bv1<bv9 OR bv1<bv10) {b1=bu1;} 
+printf("\nBuy Points\n"+bv1+"\t "+bv2+"\t "+bv3+"\t "+bv4+"\t "+bv5+"\t "+bv6+"\t "+bv7+"\t "+bv8+"\t "+bv9+"\t "+bv10);
+printf("\nMy BUY price"+"\t"+BP+"\n**C-BP**\t"+flag);
+printf("\nSell Points\n"+sv1+"\t "+sv2+"\t "+sv3+"\t "+sv4+"\t "+sv5+"\t "+sv6+"\t "+sv7+"\t "+sv8+"\t "+sv9+"\t "+sv10);
+printf("\nMy SELL price"+"\t"+SP+"\n**C-SP**\t"+sflag +"\n");
+
+
+Buy=(bu1 OR bu2 OR bu3 OR bu5 OR bu6 OR bu7 OR bu8 OR bu9 OR bu10);
+Sell=(se1 OR se2 OR se3 OR se5 OR se6 OR se7 OR se8 OR se9 OR se10);
+//With flag
+//Buy=(bu1 OR bu2 OR bu3 OR bu5 OR bu6 OR bu7 OR bu8 OR bu9 OR bu10) AND flag;
+//Sell=(se1 OR se2 OR se3 OR se5 OR se6 OR se7 OR se8 OR se9 OR se10) AND sflag;
+Buy=ExRem(Buy,Sell);
+Sell=ExRem(Sell,Buy);
+
+// ####  Plot indicators and shapes  ##########################################################################################
+Plot(C, "Combined Strategy ## S1 to S10", colorWhite, 4);
+PlotShapes( Buy* shapeUpArrow , colorGreen, 0);
+PlotShapes( Sell* shapeDownArrow , colorRed, 0);  
+

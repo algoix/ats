@@ -1,0 +1,75 @@
+L14 = LLV( Low, 14 );
+H14 = HHV( High, 14 );
+
+AroonDown =
+100* (14 - (( IIF(Ref(L,-1) == L14 ,1 , IIF( Ref(L ,-2 ) == L14 ,2 , IIF( Ref(L
+,- 3 ) == 
+L14 ,3 ,IIF( Ref(L ,-4 ) == L14 ,4 ,IIF(Ref( L ,-5 ) == L14 ,5 ,IIF(Ref(L ,-6 )
+== 
+L14 ,6 ,IIF( Ref(L ,-7 ) == L14 ,7 ,IIF(Ref( L ,-8 ) == L14 ,8 ,IIF(Ref( L ,-9 )
+== 
+L14 ,9 ,IIF( Ref(L,-10) == LLV(L,14 ) ,10 ,IIF(Ref(L ,-11) == L14 ,11
+,IIF(Ref(L,-12 ) == 
+LLV(L ,14) ,12,IIF( Ref(L,-13) == LLV(L ,14 ) ,13 ,IIF( Ref( L,-14) == L14 ,14
+,0) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) / 14;
+
+AroonUp =
+100 * ( 14 - ( ( IIF(Ref(H ,-1) == H14 ,1 ,IIF(Ref(H ,-2 ) == H14 ,2 ,IIF(Ref(H
+,- 3 ) == 
+H14 ,3, IIF(Ref(H ,-4 ) == H14 ,4 ,IIF(Ref(H ,-5 ) == H14 ,5 ,IIF(Ref(H ,-6 ) ==
+
+H14 ,6 ,IIF(Ref(H,-7 ) == H14 ,7 ,IIF(Ref(H ,-8 ) == H14 ,8 , IIF(Ref(H ,-9 ) ==
+
+H14 ,9 ,IIF(Ref(H ,-10 ) == H14 ,10 ,IIF(Ref(H ,-11 ) == H14 ,11 ,IIF(Ref(H ,-12
+) == 
+H14 ,12 ,IIF(Ref(H ,-13) == H14 ,13 ,IIF(Ref(H ,-14 ) == H14 ,14 ,0 ) ) ) ) ) )
+) ) ) ) ) ) ) ) ) ) ) / 14;
+
+// #### ANOTHER PROCESS 
+
+Filter = 1;
+NumColumns = 5;
+Column0 = O; Column0Name = "O"; Column0Format = 1.2;
+Column1 = H; Column1Name = "H"; Column1Format = 1.2;
+Column2 = L; Column2Name = "L"; Column2Format = 1.2;
+Column3 = C; Column3Name = "C"; Column3Format = 1.2;
+Column4 = V; Column4Name = "V"; Column4Format = 1.0;
+
+// END OF "INITIALIZATION OF EXPLORATION IN AMIBROKER" SECTION
+
+// ****************************************************************************************
+// AROON INDICATORS
+// ****************************************************************************************
+Period = 14;
+LLVBarsSince = LLVBars(L, Period) + 1;
+HHVBarsSince = HHVBars(H, Period) + 1;
+
+Aroon_Down = 100 * (Period - LLVBarsSince) / (Period - 1);
+Aroon_Up   = 100 * (Period - HHVBarsSince) / (Period - 1);
+Aroon_Osc  = Aroon_Up - Aroon_Down;
+
+// Exploration in Amibroker
+AddColumn(LLVBarsSince, "LLVBarsSince", format=1.0);
+AddColumn(HHVBarsSince, "HHVBarsSince", format=1.0);
+AddColumn(Aroon_Down,   "Aroon_Down",   format=1.2);
+AddColumn(Aroon_Up,     "Aroon_Up",     format=1.2);
+AddColumn(Aroonup,    "AroonUP",    format=1.2);
+AddColumn(Aroondown,    "AroonDown",    format=1.2);
+
+// END OF "AROON INDICATORS" SECTION
+
+
+//****************************************************************************************
+// GRAPHICS PRESENTATION IN AMIBROKER
+//****************************************************************************************
+MaxGraph = 3;
+Graph0 = Aroon_Down; Graph0Style = 8+4; Graph0Color = 7;
+Graph1 = Aroon_Up;   Graph1Style = 1+4; Graph1Color = 4;
+Graph2 = Aroon_Osc;  Graph2Style = 2;   Graph2Color = 1;
+
+Title = Name()
+        + " - Aroon_Down = " + WriteVal(Graph0, 1.2) + " %"
+        + ", Aroon_Up = " + WriteVal(Graph1, 1.2) + " %"
+        + ", Aroon_Osc = " + WriteVal(Graph2, 1.2) + " %";
+
+// END OF "GRAPHICS PRESENTATION IN AMIBROKER" SECTION

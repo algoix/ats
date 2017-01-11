@@ -1,0 +1,477 @@
+// Parameters to control whether you're just testing, or running live and whether the orders are created in TWS but not transmitted to IB, or created and transmitted.
+
+AutoTradingParam = True;         //ParamToggle("AutoTrading","Off|On",0);
+SubmitOrders = True;             //ParamToggle("Create or Transmit","Create Only|Create and Transmit",False);
+Tracing = False;
+
+BaseRiskPcnt = 1.00;    // Percent of account risk per trade
+AccountCutout = 75000;  // Stop trading if account falls to $X
+                        //    This exploration, by design, allows multiple positions to be placed simultaneously
+                        //    (although only 1 entry per bar), so it is highly desirable to have a safety 
+                        //    mechanism to stop trading if there is a sequence of losing trades, or there is a
+                        //    bug in the trading rules or AFL that are creating continuous losing trades.
+
+
+///////////////////////////////////////////////////////////////////////
+//
+//
+// This AFL file is designed to run as a Scan or Exploration with Run Every check box ticked. 
+// Choose a time interval suitable to the trading concept.
+// The AFL file then runs every X periods and if a signal is found it submits a Parent Order and a Bracket Order to IB.
+// It does not attempt to track the status of the orders subsequently as that would add another order of complexity and risk.
+//
+// Additionally, this example code does not enter the market immediately, it waits for confirmation of the next bar moving in the 
+//     desired direction before entering, i.e. it is important that the Exploration is run freqently enough so that it checks
+//     many times during the next bar whether the desired movement has occurred. For example, for 10 minute bars, 
+//     it would be a good idea to have the Exploration run every 30 or 60 seconds.
+//     Any other entry technique would require different coding, e.g. an immediate entry would probably simplify the coding.
+//
+//     Static variables are used to keep track of desired entries from one iteration of the Exploration to the next. 
+//
+//
+///////////////////////////////////////////////////////////////////////
+
+
+///////////////////////////////////////////////////////////////////////
+// LIMITATIONS and WARNINGS:
+// Don't use PARAMs in Auto-Trading Scans or Explorations because any PARAM change runs the formula once on the current chart
+// every time the PARAM dialogbox is opened, which is probably NOT what you want.
+//
+// AB keeps static variables in memory between each run of an Exploration. So if you need
+// to reset everything and re-start auto-trading then you MUST proceed as follows:
+//            
+//          Either restart AB, or
+//          Edit this exploration to change Auto-Trading Off, run it once, then edit the file again
+//                    and run it again. The AFL will recognise this and clear any status codes to ensure 
+//                    correct operation in Auto vs non-Auto mode.
+//
+// THIS CODE RELIES ON PREFERENCES MENU/INTRADAY "START time of interval" radio box turned ON.
+//      This is used to detect when a bar is complete, so that the trading rules know when to do their calculations.
+//      This technique is NOT designed to handle intrabar entry signals
+//
+// NOTE this AFL file was originally written for trading currencies, hence there are one or two currency specific items 
+//      that may need editing, in particular position sizes are rounded to the nearest $10,000. Check the comments.
+//
+///////////////////////////////////////////////////////////////////////
+
+
+// Function to provide voice warning whenever any new trades are created
+
+function SayNotTooOften( text, Minperiod ) 
+{ 
+   elapsed=GetPerformanceCounter()/1000; 
+   Lastelapsed = Nz( StaticVarGet("lastsaytime") ); 
+
+   if( elapsed - Lastelapsed > Minperiod ) 
+   { 
+     StaticVarSet("lastsaytime", elapsed ); 
+     Say( text ); 
+   } 
+}
+
+// Interactive Brokers ticker symbols may have unwanted characters for our static variable names. Remove them.
+
+ABName = StrMid(Name(),0,3) + StrMid(Name(),4,3);
+IBName = Name();
+	
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+if( IsNull( AutoTrading ) ) 
+	StaticVarSet("AutoTrading"+ABName,0);
+
+if ( AutoTrading==0 && AutoTradingParam )
+{
+  // About to start AutoTrading after it's been off, so clear all order statuses. 
+        StaticVarSetText("OrderID"+ABName,"");
+        StaticVarSetText("OrderIDLMT"+ABName,"");
+        StaticVarSetText("OrderIDSTP"+ABName,"");
+        StaticVarSetText("OrderStatus"+ABName,"");
+        StaticVarSetText("OrderLMTStatus"+ABName,"");
+        StaticVarSetText("OrderStatusSTP"+ABName,"");
+}
+if ( AutoTrading && AutoTradingParam==0 )
+{
+  // About to stop AutoTrading after it's been on, so clear all order statuses.
+
+        StaticVarSetText("OrderID"+ABName,"");
+        StaticVarSetText("OrderIDLMT"+ABName,"");
+        StaticVarSetText("OrderIDSTP"+ABName,"");
+        StaticVarSetText("OrderStatus"+ABName,"");
+        StaticVarSetText("OrderLMTStatus"+ABName,"");
+        StaticVarSetText("OrderStatusSTP"+ABName,"");
+}
+
+if (AutoTradingParam) 
+	StaticVarSet("AutoTrading"+ABName,1);
+else  
+	StaticVarSet("AutoTrading"+ABName,0);
+
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+ 
+Filename 	= _DEFAULT_NAME();
+
+// Your trading conditions here
+Index="NDX-NASDAQ-IND-USD";
+P=Foreign(Index,"C",1);
+pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+r=ln(O/Ref(O,-15));
+z=(O-MA(O,15))/(StdErr(O,15)*sqrt(15));
+m=(H+C+O+L)/4;
+std=(m-MA(m,15))/(Stderr(m,15)*sqrt(15));
+CS = LinRegSlope(m, 15);
+CI=LinRegIntercept(m, 15);
+y=m-(CI+CS*m);
+aa = LinRegIntercept(r,15); 
+bb = LinRegSlope(r,15);
+CHL = Max(C,15 )-Min(C,15);
+OHL = Max(O,15)-Min (O,15);
+MAH = MA(Max(15,O ),5);
+MAL = MA(Min(15,O ),5);
+spread = MAH - MAL;
+CS = LinRegSlope(O,15 );
+CI=LinRegIntercept(O,15);
+y=CI+CS*Ref(O,-1);
+function TTF( periods )
+{
+	BuyPower = HHV( High, periods ) - Ref( LLV( Low, periods ), -periods );
+	SellPower = Ref( HHV( High, periods ), -periods ) - LLV( Low, periods );
+	return 100 * (BuyPower - SellPower) / (0.5 * (BuyPower + SellPower));
+}
+s1=atan(r)*DTR;
+s2=atan(z)*DTR;
+s3=r-(aa + bb *Ref(r,-1)); 
+s4=CHL/OHL;
+s5=atan(std)*DTR;
+s6=(spread-MA(spread,5))/(Stderr(spread,5)*sqrt(5));
+s7=y-C;
+s8=(y-MA(y,30))/(StdErr(y,30)*sqrt(15));
+s9=Correlation(P,C,15)-Ref(Correlation(P,C,15),-5);
+s10= TTF(15);
+
+bu1=Cross(LLV(s1,30)*0.99,s1);
+bu2=Cross(LLV(s2,30)*0.99,s2);
+bu3=Cross(LLV(s3,30)*0.99,s3);
+bu4=Cross(0.9985,s4);
+bu5=Cross(LLV(s5,30)*0.99,s5);
+bu6=Cross(LLV(s6,30)*0.99,s6);
+bu7=Cross(LLV(s7,30)*0.99,s7) ;
+bu8=Cross(LLV(s8,30)*0.99,s8); 
+bu9=Cross(LLV(s9,30)*0.99,s9); 
+bu10=Cross(LLV(s10,30)*0.99,s10);
+
+se1=Cross(s1,HHV(s1,30)*0.99) ;
+se2=Cross(s2,HHV(s2,30)*0.99);
+se3=Cross(s3,HHV(s3,30)*0.99);
+se4=Cross(s4,1.0015);
+se5=Cross(s5,HHV(s5,30)*0.99);
+se6=Cross(s6,HHV(s6,30)*0.99);
+se7=Cross(s7,HHV(s7,30)*0.99);
+se8=Cross(s8,HHV(s8,30)*0.99);
+se9=Cross(s9,HHV(s9,30)*0.99);
+se10=Cross(s10,HHV(s10,30)*0.99);
+Buy=bu4 OR bu6 OR bu8;
+Sell=se5 OR se3;
+Short = Sell;
+Cover = Buy;
+
+
+// Following lines required because I'll only enter once the price moves in my desired direction
+ShortPrice = Min(Ref(C,-1),Open); //Or as appropriate for your trading rules.
+BuyPrice = Max(Ref(C,-1),Open); //Or as appropriate for your trading rules.
+
+// Following variables for exits are mostly for backtesting. Not all are used in Autotrading.
+
+ISLARC=3;  // Initial Stop Loss multiplier x ATR. Set as appropriate for your trading rules.
+ISL=ATR(20)*ISLARC;
+
+TSLARC=ISLARC;  // Trailing Stop Loss multiplier x ATR. Set as appropriate for your trading rules.
+TSL=ATR(20)*TSLARC;
+
+PSLARC=0.5;  // Take Profit multiplier x ATR. Set as appropriate for your trading rules.
+PSL=ATR(20)*PSLARC;
+
+nBars = 15;  // Exit after n Bars. Set as appropriate for your trading rules.
+
+ShortISLPrice=ShortPrice+Ref(ISL,-1);
+ShortPSLPrice=ShortPrice-Ref(PSL,-1);
+BuyISLPrice=BuyPrice-Ref(ISL,-1);
+BuyPSLPrice=BuyPrice+Ref(PSL,-1);
+
+// Set some variables for the right edge of the chart for the Auto-Trading code.
+LastShortPrice=LastValue(ShortPrice);
+LastBuyPrice=LastValue(BuyPrice);
+LastShortISLPrice=LastValue(ShortISLPrice);
+LastShortPSLPrice=LastValue(ShortPSLPrice);
+LastBuyISLPrice=LastValue(BuyISLPrice);
+LastBuyPSLPrice=LastValue(BuyPSLPrice);
+LastATR=LastValue(Ref(ATR(20),-1));
+
+// Stop Losses used only for Backtest mode, however this script with Automation in it is not really suitable for backtesting so don't even try.
+ApplyStop(stopTypeLoss,stopModePoint,Ref(ISL,-1),1,False,0); 
+ApplyStop(stopTypeNBar,stopModeBars,nBars,0,True);
+ApplyStop(stopTypeProfit,stopModePoint,Ref(PSL,-1),1,False,0); 
+ApplyStop(stopTypeTrailing,stopModePoint,Ref(TSL,-1),1,False,0); 
+ 
+/////////////////// Automation Code //////////////////
+
+// First check if we've just started a new bar. THIS CODE RELIES ON PREFERENCES/INTRADAY SET TO START OF INTERVAL.
+
+PrevDT = StaticVarGet("DateTime"+ABName);
+DT = LastValue(DateTime());
+NewBar = DT != PrevDT;                        
+StaticVarSet("DateTime"+ABName,DT);
+
+if( NewBar )
+{
+    // Clear all status so we can place a new order on each bar. Later, the status variables are checked to ensure
+    //     that we place no more than 1 order on each bar.
+
+    StaticVarSetText("OrderID"+ABName,"");
+    StaticVarSetText("OrderIDLMT"+ABName,"");
+    StaticVarSetText("OrderIDSTP"+ABName,"");
+    StaticVarSetText("OrderStatus"+ABName,"");
+    StaticVarSetText("OrderLMTStatus"+ABName,"");
+    StaticVarSetText("OrderStatusSTP"+ABName,"");
+}
+ 
+LastBuy = LastValue(Buy);
+LastShort = LastValue(Short);
+
+Filter=Buy OR Short;
+
+IBPosSize=0;
+
+ibc = GetTradingInterface("IB");
+IBcStatus = ibc.IsConnected();
+
+IBcStatusString = WriteIf(IBCStatus==0,"TWS Not Found",WriteIf(IBCStatus==1,"Connecting to TWS", WriteIf(IBCStatus==2,"TWS OK", WriteIf(IBCStatus==3,"TWS OK (msgs)",""))));
+
+// Work out how much money there is and adjust risk size
+
+CashBalanceStr = ibc.GetAccountValue("NetLiquidationByCurrency");
+if (CashBalanceStr == "")
+    CashBalance = 0;
+else
+    CashBalance = StrToNum(CashBalanceStr);
+
+PositionRisk = BaseRiskPcnt/100*CashBalance;
+PositionSize = PositionRisk / Ref(ISL,-1); 
+IBOrderSize = int(LastValue(PositionSize)/10000)*10000;  // Round to nearest $10k - designed for FX ************
+
+OldOrderID = StaticVarGetText("OrderID"+ABName);
+if (AutoTrading == 0 && OldORderID == "" && (LastBuy || LastShort))
+{
+    // If there would have been an order during Autotrading, then create a dummy OID to test all other code paths
+    // e.g. logging, explore output etc.
+    StaticVarSetText("OrderID"+ABName,"DUMMY");
+}
+
+if( IBcStatus AND AutoTrading AND (CashBalance > AccountCutout))
+{
+    OrderID = StaticVarGetText("OrderID"+ABName);
+    OrderIDLMT = StaticVarGetText("OrderIDLMT"+ABName);
+    OrderIDSTP = StaticVarGetText("OrderIDSTP"+ABName);
+
+    IBPosSize = ibc.GetPositionSize( IBName );
+	// Only enter once the price moves in my desired direction, otherwise wait until next run of the exploration
+	//     and check again, and again., ...
+    if( LastBuy AND OrderID == "" AND (LastValue(C) <= (LastBuyPrice)))  
+    {
+        OID = ibc.PlaceOrder( IBName, "Buy", IBOrderSize, "TRAIL", 0, TickSize,"DAY", False, TickSize/0.0001, "outsideRTH" );
+        // _TRACE("# Pos: 0, PrevOID: "+OrderID+", Buy 1, NewOID: "+OID);
+        OIDLMT = ibc.PlaceOrder( IBName, "Sell", IBOrderSize, "LMT", LastBuyPSLPrice, 0, "GTC", False, TickSize/0.0001, "outsideRTH",OID);
+        OIDSTP = ibc.PlaceOrder( IBName, "Sell", IBOrderSize, "STP", 0,LastBuyISLPrice,"GTC", SubmitOrders, TickSize/0.0001,"outsideRTH", OID);
+
+        for (dummy=0; dummy<40; dummy++)
+            ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        StaticVarSetText("OrderID"+ABName,OID);
+        StaticVarSetText("OrderIDLMT"+ABName,OIDLMT);
+        StaticVarSetText("OrderIDSTP"+ABName,OIDSTP);
+        SayNotTooOften("There is an order to be checked",30);
+
+        if (SubmitOrders)
+        {
+            for (dummy=0; dummy<40; dummy++)
+                ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+
+             // Wait until order actually PreSubmitted - this will prevent submitting another order too quickly
+             //     hopefully stops TWS/IB getting in a knot
+
+             tradetime=GetPerformanceCounter()/1000; 
+             while ((GetPerformanceCounter()/1000 - tradetime) < 5) // give up after 5 seconds
+             {
+                 ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                 ORderStatus = ibc.GetStatus( OID, True);
+                 if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted"|| ORderStatus == "Filled")
+                     break;
+             }
+        }
+    }
+
+	// Only enter once the price moves in my desired direction, otherwise wait until next run of the exploration
+	//     and check again, and again., ...
+    else if( LastShort AND OrderID == "" AND (LastValue(C) >= (LastShortPrice)))
+ 
+    {
+        OID = ibc.PlaceOrder( IBName, "Sell", IBOrderSize, "TRAIL", 0, TickSize,"DAY", False, TickSize/0.0001, "outsideRTH" );
+        // _TRACE("# Pos: 0, PrevOID: "+OrderID+", Sell 1, NewOID: "+OID);
+
+        OIDLMT = ibc.PlaceOrder( IBName, "Buy", IBOrderSize, "LMT", LastShortPSLPrice, 0, "GTC", False, TickSize/0.0001, "outsideRTH", OID);
+        OIDSTP = ibc.PlaceOrder( IBName, "Buy", IBOrderSize, "STP", 0,LastShortISLPrice, "GTC", SubmitOrders, TickSize/0.0001,"outsideRTH", OID);
+        for (dummy=0; dummy<40; dummy++)
+            ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        StaticVarSetText("OrderID"+ABName,OID);
+        StaticVarSetText("OrderIDLMT"+ABName,OIDLMT);
+        StaticVarSetText("OrderIDSTP"+ABName,OIDSTP);
+        SayNotTooOften("There is an order to be checked",30);
+
+        if (SubmitOrders)
+        {
+            //Usually takes about a second for TWS to get acknowledgement from IB, so delay for 2 secs for safety
+            for (dummy=0; dummy<40; dummy++)
+                ibc.Sleep(50);  
+
+             // Wait until order actually PreSubmitted - this will prevent submitting another order too quickly
+             //     hopefully stops TWS/IB getting in a knot
+
+            tradetime=GetPerformanceCounter()/1000; 
+            while ((GetPerformanceCounter()/1000 - tradetime) < 5) // give up after 5 seconds
+            {
+                ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                ORderStatus = ibc.GetStatus( OID, True);
+                if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted"|| ORderStatus == "Filled")
+                    break;
+            }
+        }
+    }
+
+    // Note LastOrderID will remain "" while waiting for price improvement so we may skip entering for the whole of the bar
+    LastOrderID = StaticVarGetText("OrderID"+ABName);
+    LastOrderIDLMT = StaticVarGetText("OrderIDLMT"+ABName);
+    LastOrderIDSTP = StaticVarGetText("OrderIDSTP"+ABName);
+
+    ORderStatus = ibc.GetStatus( LastOrderID , True );
+    if( ORderStatus != "" ) StaticVarSetText("OrderStatus"+ABName,ORderStatus);
+
+    ORderLMTStatus = ibc.GetStatus( LastOrderIDLMT , True );
+    if( ORderLMTStatus != "" )
+StaticVarSetText("OrderLMTStatus"+ABName,ORderLMTStatus);
+
+    ORderSTPStatus = ibc.GetStatus( LastOrderIDSTP , True );
+    if( ORderSTPStatus != "" )
+StaticVarSetText("OrderStatusSTP"+ABName,ORderSTPStatus);
+}
+else IBPosSize = 0;
+ 
+LastOrderID = StaticVarGetText("OrderID"+ABName);
+ORderStatus = StaticVarGetText("OrderStatus"+ABName);
+LastOrderIDLMT = StaticVarGetText("OrderIDLMT"+ABName);
+ORderLMTStatus = StaticVarGetText("OrderLMTStatus"+ABName);
+LastOrderIDSTP = StaticVarGetText("OrderIDSTP"+ABName);
+ORderSTPStatus = StaticVarGetText("OrderSTPStatus"+ABName);
+
+Title = Filename+":"+ABName+"\n"+
+" Trading Mode:         "+WriteIf( AutoTrading,"ON"+WriteIf( SubmitOrders," -
+Create and Transmit"," - Create Only"),"OFF")+"\n"+
+" Last Signal:          "+WriteIf(LastBuy,"BUY",WriteIf
+(LastShort,"SHORT","NoSignal"))+"\n"+
+" IB Status:            "+IBcStatusString+"\n"+
+" Last OrderID,LMT,STP:
+"+LastOrderID+","+LastOrderIDLMT+","+LastOrderIDSTP+"\n"+
+" OrderStatus,LMT,STP: 
+"+ORderStatus+WriteIf(ORderStatus=="Error",ibc.GetLastError( LastOrderID
+),"")+","+ORderLMTStatus+","+ORderSTPStatus+"\n"+
+" LastTime:             "+DateTimeToStr(LastValue(DateTime()))+"\n"+
+" IBPosSize:            "+NumToStr(IBPosSize,1.0);
+ 
+AddColumn(CashBalance,"Cash",1.2);
+AddColumn(IIf(AutoTrading,Asc("Y"),Asc("N")),"AT",formatChar);
+AddColumn(IIf(SubmitOrders,Asc("Y"),Asc("N")),"Transmit",formatChar);
+AddColumn(Ref(ATR(20),-1),"ATR(20)",1.6);
+//AddColumn(BuyCond1 OR ShortCond1,"Cond1",1.0);
+AddColumn(IIf(Buy,Asc("L"),IIf(Short,Asc("S"),Asc(" "))),"L/S",formatChar);
+AddColumn(PositionRisk,"Risk",1.2);
+AddColumn(int(LastValue(PositionSize)/10000)*10000,"PosSize",1.0);      // Assumes FX *******************
+AddColumn(IBOrderSize,"Qty",1.0);
+AddColumn(IIf(Buy,BuyPrice,ShortPrice),"Entry",1.5);
+AddColumn(ISLARC,"ISLARC",1.2);
+AddColumn(IIf(Buy,BuyISLPrice,ShortISLPrice),"Loss Stop",1.5);
+AddColumn(IIf(Buy,BuyPSLPrice,ShortPSLPrice),"Profit Take",1.5);
+
+AddTextColumn(IBcStatusString,"IBC Status",1.0);
+AddTextColumn(LastOrderID,"LastOID",1.0);
+AddTextColumn(ORderStatus,"OrderStatus",1.0);
+
+
+// 
+// The following code writes all the above AddColumn to permanent logfile, where Filter occurs on last bar 
+// 
+
+if (Filter[BarCount-1] && OldOrderID == "" && LastOrderID != "")    // No order previously in place for this bar, this execution created one
+{
+	fh = fopen( "TWSTrade.log", "a"); 
+	if( fh ) 
+	{ 
+		fputs( Now(), fh ); 
+		fputs( ", ", fh );
+
+		fputs( "Ticker: ", fh );
+
+		fputs( IBName, fh );
+		fputs( ", ", fh );
+
+		fputs( "BarTime: ", fh );
+		
+		fputs( DateTimeToStr(DT), fh ); 
+		fputs( ", ", fh);
+	
+		qs = StrFormat("Cash: %.2f, ", 
+						CashBalance);
+		fputs( qs, fh ); 
+
+		fputs( "AT: ", fh );
+		if (AutoTrading) fputs( "Y, " , fh );
+		else fputs( "N, " , fh );  
+
+		fputs( "Submit: ", fh );
+		if (SubmitOrders) fputs( "Transmit, " , fh );
+		else fputs( "Create_Only, " , fh );  
+
+		if (LastBuy) fputs( "Buy, ", fh);
+		else if (LastShort) fputs( "Short, ", fh);
+		else fputs( "Not_Valid, ", fh);
+
+		qs = StrFormat("%.0f, ", 
+					IBOrderSize ); 
+		fputs( qs, fh ); 
+
+		if (LastBuy)
+			qs = StrFormat("Entry: %.5f, ISLARC: %.2f, Stop: %.5f, Profit: %.5f, ", 
+						LastBuyPrice, ISLARC, LastBuyISLPrice, LastBuyPSLPrice);
+		else 
+			qs = StrFormat("Entry: %.5f, ISLARC: %.2f, Stop: %.5f, Profit: %.5f, ", 
+						LastShortPrice, ISLARC, LastShortISLPrice, LastShortPSLPrice);
+		fputs( qs, fh ); 
+
+		fputs( "IBC Status: ", fh );
+		fputs( IBCStatusString, fh );
+		fputs( ", ", fh);
+
+		fputs( "LastOID: ", fh );
+		fputs( LastOrderID, fh );
+		fputs( ", ", fh);
+
+		fputs( "OrderStatus: ", fh );
+		fputs( ORderStatus, fh );
+		fputs( ", ", fh);
+
+		if (ORderStatus=="Error")
+			fputs( ibc.GetLastError( LastOrderID ), fh);
+		fputs( ", ", fh);
+
+		fputs( "\n", fh );
+
+		fclose( fh ); 
+	} 
+}

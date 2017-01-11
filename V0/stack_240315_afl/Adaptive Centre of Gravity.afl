@@ -1,0 +1,92 @@
+Arrows = ParamToggle( "Buy/Sell Arrows", "No|Yes", 1 );
+PriceIn = ( ( H + L ) / 2 );
+Alpha = Param( "Alpha", 0.07, 0.01, 0.4, 0.01, 0.01 );
+CG = BullSig = BearSig = Trigger = Cycle = InstPeriod = Period = DeltaPhase =
+0;
+
+SmoothX = ( PriceIn + 2 * Ref( PriceIn, -1 ) + 2 * Ref( PriceIn, -2 ) + Ref(
+PriceIn, -3 ) ) / 6;
+
+for ( i = 10; i < BarCount; i++ )
+{
+    Cycle[i] = ( ( 1 - 0.5 * alpha ) ^ 2 ) * ( SmoothX[ i ] - 2 * SmoothX[ i - 1
+] + SmoothX[ i - 2] ) + 2 * ( 1 - alpha ) * Cycle[ i - 1 ] - ( ( 1 - alpha ) ^ 2
+) * Cycle[ i - 2 ];
+    Q1[i] = ( .0962 * cycle[i] + .5769 * cycle[i-2] - .5769 * cycle[i-4] - .0962
+* cycle[i-6] ) * ( .5 + .08 * InstPeriod[i-1] );
+    I1[i] = cycle[i-3];
+
+    if ( Q1[i] != 0 AND Q1[i-1] != 0 )
+        DeltaPhase[i] = ( I1[i] / Q1[i] - I1[i-1] / Q1[i-1] ) / ( 1 + I1[i] *
+I1[i-1] / ( Q1[i] * Q1[i-1] ) );
+
+    if ( DeltaPhase[i] < 0.1 )
+        DeltaPhase[i] = 0.1;
+
+    if ( DeltaPhase[i] > 1.1 )
+        DeltaPhase[i] = 1.1;
+
+    mlen = 5;
+
+    for ( k = mlen - 1; k >= 0; k-- )
+    {
+        temparray[k] = DeltaPhase[i + k - ( mlen - 1 )];
+    }
+
+    temp = 0;
+
+    for ( k = mlen - 1; k > 0; k-- )
+    {
+        for ( j = mlen - 1; j > 0; j-- )
+        {
+            if ( temparray[j-1] > temparray[j] )
+            {
+                temp = temparray[j-1];
+                temparray[j-1] = temparray[j];
+                temparray[j] = temp;
+            }
+        }
+    }
+
+    MedianDelta[i] = temparray[mlen - 1 - ( mlen / 2 )];
+
+    if ( MedianDelta[i] == 0 )
+        DC[i] = 15;
+    else
+        DC[i] = 6.28318 / MedianDelta[i] + .5;
+
+    InstPeriod[i] = .33 * DC[i] + .67 * InstPeriod[i-1];
+
+    Period[i] = .15 * InstPeriod[i] + .85 * Period[i-1];
+
+    IntPeriod[i] = int( Period[i] / 2 );
+
+    num = 0;
+
+    denom = 0;
+
+    for ( j = 0; j < intPeriod[i]; j++ )
+    {
+        num = num + ( 1 + j ) * PriceIn[i - j];
+        denom = denom + PriceIn[i - j];
+    }
+
+    if ( denom != 0 )
+        CG[i] = -num / denom + ( IntPeriod[i] + 1 ) / 2;
+}
+
+Trigger = Ref( CG, -1 );
+
+BullSig = IIf( Cross( CG, Trigger ), True, False );
+BearSig = IIf( Cross( Trigger, CG ), True, False );
+
+
+Plot( CG, "Adaptive_CG", colorLightBlue, styleLine );
+Plot( Trigger, "Trigger", colorRed, styleLine );
+Plot( 0 , "", colorWhite, styleDashed );
+
+if ( Arrows )
+{
+    PlotShapes( shapeUpArrow*BullSig, colorBrightGreen );
+    PlotShapes( shapeDownArrow*BearSig, colorRed );
+}

@@ -1,0 +1,348 @@
+_SECTION_BEGIN("algoBSS");
+AutoTradingParam = True;        
+SubmitOrders = True;            
+Tracing = False;
+MarketStart=093000;
+MarketOpen = 094500;//09:30:00;
+MarketClose =151500;//04:00:00 
+MarketEnd=160000;
+LM=155500;
+MarketON = TimeNum() >= MarketOpen AND Now( 4 ) < MarketClose;
+MarketOFF = Now( 4 ) >= MarketClose ;//day's over*/
+SellOn=(TimeNum() >= MarketStart AND Now( 4 ) < MarketOpen) OR (Now( 4 ) >=MarketClose AND Now( 4 )<MarketEnd);
+SellOff=Now( 4 ) >= MarketEnd ;
+MarketLM=Now( 4 ) >=LM AND Now( 4 )<MarketEnd;
+ABName=getfndata("Alias");
+IBName =getfndata("Alias");
+	
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+
+if( IsNull( AutoTrading ) ) StaticVarSet("AutoTrading"+ABName,0);
+if ( AutoTrading==0 && AutoTradingParam )  StaticVarSetText("OrderID"+ABName,"");
+if ( AutoTrading && AutoTradingParam==0 )  StaticVarSetText("OrderID"+ABName,"");
+if (AutoTradingParam) StaticVarSet("AutoTrading"+ABName,1);
+else  StaticVarSet("AutoTrading"+ABName,0);
+
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+ 
+Filename 	= _DEFAULT_NAME();
+
+bu=C>MA(C,3) AND C>O;
+se=0;
+
+watchlistbuy= InWatchList(10);
+Buy=bu AND watchlistbuy;//AND C>Ref(C,-1) // AND C>O
+Sell= InWatchList(13);
+Cover=0;
+Short=0;
+
+PrevDT = StaticVarGet("DateTime"+ABName);
+DT = LastValue(DateTime());
+NewBar = DT != PrevDT;                        
+StaticVarSet("DateTime"+ABName,DT);
+
+if( NewBar )
+    StaticVarSetText("OrderID"+ABName,"");
+ 
+LastBuy = LastValue(Buy);
+LastSell = LastValue(Sell);
+LastShort = LastValue(Short);
+
+Filter=(Buy OR Sell) ; //AND watchlistcheck ;
+IBPosSize=0;
+
+ibc = GetTradingInterface("IB");
+IBcStatus = ibc.IsConnected();
+
+IBcStatusString = WriteIf(IBCStatus==0,"TWS Not Found",WriteIf(IBCStatus==1,"Connecting to TWS",WriteIf(IBCStatus==2,"TWS OK",WriteIf(IBCStatus==3,"TWS OK (msgs)",""))));
+
+// Work out how much money there is and adjust risk size
+
+CashBalanceStr = ibc.GetAccountValue("NetLiquidationByCurrency");
+if (CashBalanceStr == "")
+    CashBalance = 0;
+else
+    CashBalance = StrToNum(CashBalanceStr);
+    
+ availablefundstr=ibc.GetAccountValue("[CAD]AvailableFunds");
+ if (availablefundstr =="")
+    availablefund = 0;
+else
+   availablefund = StrToNum(availablefundstr);
+ 
+ excessfundstr=ibc.GetAccountValue("[CAD]ExcessLiquidity");
+ if (excessfundstr =="")
+    excessfund = 0;
+else
+   excessfund = StrToNum(excessfundstr);  
+   
+ AccountCutout =excessfund<40000;  //only selling 
+    
+
+function stockprice()
+{base=1;
+	for(i=0;i<=LastValue(C);i++){
+	base++;
+	}
+	roundoff=int(base/5)*5;
+return lastvalue(roundoff);
+}
+
+base=stockprice();
+IBOrderSize =int(CashBalance*0.03/base); //(int(LastValue(PositionSize)/10000)*10000)/(20*LastValue(C));  // Round to nearest $10k
+
+
+OldOrderID = StaticVarGetText("OrderID"+ABName);
+if (AutoTrading == 0 && OldORderID == "" && (LastBuy || LastShort))
+{
+    // If there would have been an order during Autotrading, then create a dummy OID to test all other code paths
+    // e.g. logging, explore output etc.
+    StaticVarSetText("OrderID"+ABName,"DUMMY");
+}
+
+if( IBcStatus AND AutoTrading )
+{
+    OrderID = StaticVarGetText("OrderID"+ABName);
+    BuyPending=ibc.IsOrderPending(OrderID);
+    SellPending=ibc.IsOrderPending(OrderID);
+    averageprice=0;
+    IBPosSize = ibc.GetPositionSize( IBName );
+	// Only enter once the price moves in my desired direction, otherwise wait until next run of the exploration 	//     and check again, and again., ...
+    openpos = ibc.GetPositionList();   
+    
+    listnum = 13; // we use watchlist 10 for storing results selected stocks to buy and 13 for list of holding stocks
+    if ( Status( "stocknum" ) == 0 )
+	{
+    // retrieve watchlist members
+    oldlist = CategoryGetSymbols( categoryWatchlist, listnum );
+    // iterate through the list and remove tickers
+    for ( i = 0; ( sym = StrExtract( oldlist, i ) ) != ""; i++ )
+    {
+        CategoryRemoveSymbol( sym, categoryWatchlist, listnum );
+    }
+	}
+    
+	// erase the watchlist when we process very first symbol
+	for( i = 0; ( symbol = StrExtract( openpos, i ) ) != ""; i++ ) 
+		{ 
+			CategoryAddSymbol( symbol, categoryWatchlist, listnum );
+			if(symbol==getfndata("Alias"))
+			{
+			aprice = ibc.GetPositionInfo(symbol, "Avg. cost");
+			averageprice=aprice; 
+			} 
+		}
+	
+	
+	
+    
+	if( LastBuy AND !LastValue(AccountCutout) AND OrderID == "" AND  ibc.GetPositionSize(getfndata("Alias"))==0 AND LastValue(MarketON))  //BUY
+    {
+        OID= ibc.PlaceOrder( getfndata("Alias"), "Buy",IBOrderSize, "MKT",LastValue(C), 0, "Day", True); 
+        StaticVarSetText("OrderID"+ABName,OID);
+        for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        if (SubmitOrders)
+        {
+            for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+
+             tradetime=GetPerformanceCounter()/1000; 
+             while ((GetPerformanceCounter()/1000 - tradetime) <2) // give up after 5 seconds
+             {
+                 ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                 ORderStatus = ibc.GetStatus( OID, True);
+                 if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted" || ORderStatus == "Filled")
+                     break;
+             }
+        }
+                     
+    }
+ 
+		
+		//Short sell will be implemented later
+		
+    /*if( LastShort AND OrderID == "" AND  ibc.GetPositionSize(getfndata("Alias"))==0 AND LastValue(MarketON))  //SHORT SELL
+    {
+        OID= ibc.PlaceOrder( getfndata("Alias"), "Sell",IBOrderSize, "LMT",LastValue(C), 0, "Day", True); 
+        StaticVarSetText("OrderID"+ABName,OID);
+        for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        if (SubmitOrders)
+        {
+            for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+
+             tradetime=GetPerformanceCounter()/1000; 
+             while ((GetPerformanceCounter()/1000 - tradetime) <2) // give up after 5 seconds
+             {
+                 ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                 ORderStatus = ibc.GetStatus( OID, True);
+                 if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted" || ORderStatus == "Filled")
+                     break;
+             }
+        }
+                     
+    }*/
+    if( InWatchList(13) AND LastValue(C)>(averageprice*1.002)  AND OrderID == "" AND ibc.GetPositionSize(getfndata("Alias"))>0) //SELL
+    {
+		OID = ibc.PlaceOrder(getfndata("Alias"), "Sell",IBPosSize, "LMT",averageprice*1.002, 0, "Day",True );
+	
+        for (dummy=0; dummy<40; dummy++)   ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        StaticVarSetText("OrderID"+ABName,OID);
+        if (SubmitOrders)
+        {
+            //Usually takes about a second for TWS to get acknowledgement from IB, so delay for 2 secs for safety
+            for (dummy=0; dummy<40; dummy++)   ibc.Sleep(50);  
+
+            tradetime=GetPerformanceCounter()/1000; 
+            while ((GetPerformanceCounter()/1000 - tradetime) <3) // give up after 5 seconds
+            {
+                ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                ORderStatus = ibc.GetStatus( OID, True);
+                if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted"|| ORderStatus == "Filled")
+                    break;
+            }
+        }
+    }
+    if(InWatchList(13) and LastValue(C)<(averageprice*0.965) AND OrderID == "" AND ibc.GetPositionSize(getfndata("Alias"))>0) //STOP LOSS
+    {
+		OID = ibc.PlaceOrder(getfndata("Alias"), "Sell",IBPosSize, "LMT",averageprice*0.965, 0, "Day",True );
+	
+        for (dummy=0; dummy<40; dummy++)   ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        StaticVarSetText("OrderID"+ABName,OID);
+        if (SubmitOrders)
+        {
+            //Usually takes about a second for TWS to get acknowledgement from IB, so delay for 2 secs for safety
+            for (dummy=0; dummy<40; dummy++)   ibc.Sleep(50);  
+
+            tradetime=GetPerformanceCounter()/1000; 
+            while ((GetPerformanceCounter()/1000 - tradetime) <3) // give up after 5 seconds
+            {
+                ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                ORderStatus = ibc.GetStatus( OID, True);
+                if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted"|| ORderStatus == "Filled")
+                    break;
+            }
+        }
+    }
+       // (SellOn) AND OR  
+    if( LastValue(V)<LastValue(MA(V,30))*0.6 AND InWatchList(13) AND LastValue(C)>(averageprice*1.001)  AND OrderID == "" AND ibc.GetPositionSize(getfndata("Alias"))>0)//Sell during opening,closing of market and AccountCutout
+    {
+		OID = ibc.PlaceOrder(getfndata("Alias"), "Sell",IBPosSize, "LMT",averageprice*1.001, 0, "Day",True );
+	
+        for (dummy=0; dummy<40; dummy++)   ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        StaticVarSetText("OrderID"+ABName,OID);
+        if (SubmitOrders)
+        {
+            //Usually takes about a second for TWS to get acknowledgement from IB, so delay for 2 secs for safety
+            for (dummy=0; dummy<40; dummy++)   ibc.Sleep(50);  
+
+            tradetime=GetPerformanceCounter()/1000; 
+            while ((GetPerformanceCounter()/1000 - tradetime) <3) // give up after 5 seconds
+            {
+                ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                ORderStatus = ibc.GetStatus( OID, True);
+                if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted"|| ORderStatus == "Filled")
+                    break;
+            }
+        }
+    }
+    if(MarketLM AND InWatchList(13) AND LastValue(C)>(averageprice*0.9985)  AND OrderID == "" AND ibc.GetPositionSize(getfndata("Alias"))>0)// last five minutes to scrap green holding and low profit stocks
+    {
+		OID = ibc.PlaceOrder(getfndata("Alias"), "Sell",IBPosSize, "MKT",0, 0, "Day",True );
+	
+        for (dummy=0; dummy<40; dummy++)   ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        StaticVarSetText("OrderID"+ABName,OID);
+        if (SubmitOrders)
+        {
+            //Usually takes about a second for TWS to get acknowledgement from IB, so delay for 2 secs for safety
+            for (dummy=0; dummy<40; dummy++)   ibc.Sleep(50);  
+
+            tradetime=GetPerformanceCounter()/1000; 
+            while ((GetPerformanceCounter()/1000 - tradetime) <3) // give up after 5 seconds
+            {
+                ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                ORderStatus = ibc.GetStatus( OID, True);
+                if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted"|| ORderStatus == "Filled")
+                    break;
+            }
+        }
+    }
+ 
+     
+      // Note LastOrderID will remain "" while waiting for price improvement so we may skip entering for the whole of the bar
+    LastOrderID = StaticVarGetText("OrderID"+ABName);
+
+    ORderStatus = ibc.GetStatus( LastOrderID , True );
+    if( ORderStatus != "" ) StaticVarSetText("OrderStatus"+ABName,ORderStatus);
+}
+else IBPosSize = 0;
+ 
+LastOrderID = StaticVarGetText("OrderID"+ABName);
+ORderStatus = StaticVarGetText("OrderStatus"+ABName);
+Title = Filename+":"+ABName+"\n"+" Trading Mode:"+WriteIf( AutoTrading,"ON"+WriteIf( SubmitOrders," -Create and Transmit"," - Create Only"),"OFF")+"\n"+" Last Signal: "+WriteIf(LastBuy,"BUY",WriteIf
+(LastShort,"SHORT","NoSignal"))+"\n"+" IB Status: "+IBcStatusString+"\n"+" Last OrderID:"+LastOrderID+","+"\n"+" OrderStatus:"+ORderStatus+WriteIf(ORderStatus=="Error",ibc.GetLastError( LastOrderID
+),"")+"," + "LastTime:  "+DateTimeToStr(LastValue(DateTime()))+"\n";
+AddTextColumn(FullName(),"name",200);
+AddColumn(Buy,"Buy",1.0);
+AddColumn(CashBalance,"Cash",1.2);
+AddColumn(availablefund,"availablefund",1.2);
+AddColumn(excessfund,"excessfund",1.2);
+AddColumn(IIf(AutoTrading,Asc("Y"),Asc("N")),"AT",formatChar);
+AddColumn(IIf(SubmitOrders,Asc("Y"),Asc("N")),"Transmit",formatChar);
+AddColumn(IIf(Buy,Asc("L"),IIf(Short,Asc("S"),Asc(" "))),"Buy/Sell",formatChar);
+AddColumn(IBOrderSize,"Qty",1.0);
+AddColumn(IIf(Buy,BuyPrice,ShortPrice),"Entry",1.5);
+AddTextColumn(IBcStatusString,"IBC Status",1.0);
+AddTextColumn(LastOrderID,"LastOID",1.0);
+AddTextColumn(ORderStatus,"OrderStatus",1.0);
+
+if ( ORderStatus=="Filled")    // No order previously in place for this bar, this execution created one
+{
+	fh = fopen( "TWSTrade.log", "a"); //a = appending not w( writing) or r(reading)
+	if( fh ) 
+	{ 
+		fputs( Now(), fh ); 
+		fputs( ", ", fh );
+
+		fputs( "Ticker: ", fh );
+
+		fputs( IBName, fh );
+		fputs( ", ", fh );
+	
+		qs = StrFormat("Cash: %.2f, ",CashBalance);
+		fputs( qs, fh ); 
+		af = StrFormat("Available Fund: %.2f, ", availablefund);
+		fputs(af, fh );
+		ef = StrFormat("Excess Fund: %.2f, ", excessfund);
+		fputs(ef, fh );
+	
+		fputs( "Submit: ", fh );
+		if (SubmitOrders) fputs( "Transmit, " , fh );
+	  
+
+		if (LastBuy) fputs( "Buy, ", fh);
+		//else if (LastShort) fputs( "Short, ", fh);
+		else fputs( "Sell, ", fh);
+
+		qs = StrFormat("%.0f, ", IBOrderSize ); 
+		fputs( qs, fh ); 
+		//qs = StrFormat("B/S: ",ORderStatus);
+		
+		fputs( "LastOID: ", fh );
+		fputs( LastOrderID, fh );
+		fputs( ", ", fh);
+
+		
+		//if (ORderStatus=="Error")
+			//fputs( ibc.GetLastError( LastOrderID ), fh);
+		//fputs( ", ", fh);
+
+		//fputs( "\n", fh );
+		//fputs( "Portfolio:", fh );
+		//fputs(openpos,fh);
+		fputs( "\n", fh );
+		fclose( fh ); 
+	} 
+}
+
+_SECTION_END();
+
+

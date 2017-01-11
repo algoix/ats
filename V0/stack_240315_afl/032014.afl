@@ -1,0 +1,32 @@
+function PJKStress( High2, Low2, Close2, period )
+{
+  range1 = HHV( High, period ) - LLV( Low, period );
+  range2 = HHV( High2, period ) - LLV( Low2, period );
+  stoch1 = ( Close - LLV( Low, period ) )/range1;
+  stoch2 = ( Close2 - LLV( Low2, period ) )/range2;
+
+  VarSet("sstoch1", 100 * stoch1 );
+  VarSet("sstoch2", 100 * stoch2 );
+
+  diff = stoch1 - stoch2;
+
+  range1 = HHV( diff, period ) - LLV( diff, period );
+  
+  return 100 * ( diff - LLV( diff, period ) )/range1;
+}
+
+momper = 60;
+Hedgeper = 60;
+
+SetForeign("$NDX");
+// store index data in High2/Low2/Close2 variables
+High2 = High;
+Low2 = Low;
+Close2 = Close;
+RestorePriceArrays();
+
+stress = PJKStress( High2, Low2, Close2, momper );
+
+Plot( stress, "Stress", colorRed, styleThick );
+Plot( sstoch1, "Stoch1", colorGreen );
+Plot( sstoch2, "Stoch2", colorBlue ); 

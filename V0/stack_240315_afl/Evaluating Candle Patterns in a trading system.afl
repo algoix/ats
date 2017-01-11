@@ -1,0 +1,34 @@
+#include <CandleFunctionsInclude.afl>
+
+SetTradeDelays(1,1,1,1);
+// remember to set BuyPrice, SellPrice, etc.
+Md = ParamToggle("System Mode","Long Only|Short Only",0);
+
+CP = Optimize("CP",0,0,44,1);
+PP = Optimize("PP",1,1,5,1);
+
+if(Md)
+	{
+	Buy = CandlePattern(CP);
+	Sell = Ref(Buy,-PP);
+	Short = Cover = 0;
+	}
+else
+	{
+	Short = CandlePattern(CP);
+	Cover = Ref(Short,-PP);
+	Buy = Sell = 0;
+	}
+	
+Plot( C, "Close", ParamColor("Color", colorDefault ), styleNoTitle | ParamStyle("Style") | GetPriceStyle() ); 	
+if ( Md )
+{
+    PlotShapes( shapeUpArrow*Buy, colorBrightGreen );
+    PlotShapes( shapeDownArrow*Sell, colorRed );
+}
+
+else
+{
+PlotShapes( shapeUpArrow*Cover, colorBrightGreen );
+    PlotShapes( shapeDownArrow*Short, colorRed );
+}

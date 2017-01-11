@@ -1,0 +1,68 @@
+SetBarsRequired( 400, 0 );
+bi = BarIndex();
+
+//Filtering condition
+ZZPercent=0.6;
+ZZ=Zig(C,ZZPercent);
+ZZbottom=(ZZ<Ref(ZZ,-1)) AND (ZZ<Ref(ZZ,1));
+ExitZscorelookback=5;
+ZScore=(C-MA(C,ExitZscorelookback))/StDev(C,ExitZscorelookback);
+
+percdiff = 0.6; /* peak detection threshold */
+PK= Peak( H, percdiff, 1 ) == High;
+TR= Trough( L, percdiff, 1 ) == Low;
+
+xTr1 = ValueWhen( Tr, L, 1 );
+xTr2 = ValueWhen( Tr, L, 2 );
+xTr3 = ValueWhen( Tr, L, 3 );
+xTr4 = ValueWhen( Tr, L, 4 );
+val=valuewhen(ZZbottom,C,1);
+
+downup=IIf(xTr1>xTr2 and C>xTr1 AND xTr2<val,1,0);
+
+
+
+
+listnum = 10; // we use watchlist 10 for storing results
+
+// erase the watchlist when we process very first symbol
+if ( Status( "stocknum" ) == 0 )
+{
+    // retrieve watchlist members
+    oldlist = CategoryGetSymbols( categoryWatchlist, listnum );
+
+    // iterate through the list and remove tickers
+    for ( i = 0; ( sym = StrExtract( oldlist, i ) ) != ""; i++ )
+    {
+        CategoryRemoveSymbol( sym, categoryWatchlist, listnum );
+    }
+}
+
+
+//watchlistLSE=InWatchList(2);//
+watchlistUS= InWatchList(4);
+//watchlistTSE=InWatchList(1);
+//Filter =condition2 AND condition3 AND downup AND watchlistLSE;
+//Filter=watchlistLSE OR watchlistUS;
+Filter= C<xTr2*1.02 AND C<val*1.003 AND xTr1<xTr2*1.01 AND downup AND !GapDown() AND watchlistUS;//  (watchlistLSE OR watchlistUS);
+ 
+//Filter = Buy OR Sell;
+//AddColumn( IIf( Buy, 'B', 'S' ), "Signal", formatChar );
+
+
+AddColumn(downup,"Th-up",1.0,ColorGreen);
+
+//AddColumn( bi, "BarIndex" );
+//AddColumn( ValueWhen( condition1, bi ), "ValueWhen( cond, BarIndex() )" );
+//AddColumn( ValueWhen( condition2, Close), "ValueWhen( cond, Close )" );
+AddColumn(C,"Close",1.2,ColorGreen);
+AddColumn(xTr1,"F-Th",1.2,ColorGreen);
+AddColumn(xTr2,"S-TH",1.2,ColorGreen);
+AddColumn(xTr3,"T-TH",1.2,ColorGreen);
+AddColumn(val,"ZZ Down",1.2,ColorGreen);
+
+
+// check how many times Filter variable was true in the tested range
+// if non-zero value detected, add current symbol to a watchlist
+if ( LastValue( Cum( Filter AND Status( "barinrange" ) ) )  )
+    CategoryAddSymbol( "", categoryWatchlist, listnum );

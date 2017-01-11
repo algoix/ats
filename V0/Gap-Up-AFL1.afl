@@ -1,0 +1,89 @@
+//http://www.marketcalls.in/amibroker/intraday-gap-gap-amibroker-strategy.html
+_SECTION_BEGIN("Gap buy Sell");
+
+target = Param("Target %",1,0.1,10,0.1);
+NewDay = Day()!= Ref(Day(), -1);
+EndDay = (Day()!= Ref(Day(), 1));
+on_off_Gap = ParamToggle("Gap ","Off|On",1);
+DayH = TimeFrameGetPrice("H", inDaily, -1);	// yesterdays high
+DayL = TimeFrameGetPrice("L", inDaily, -1);	//	low
+DayC = TimeFrameGetPrice("C", inDaily, -1);	//	close
+DayO = TimeFrameGetPrice("O", inDaily);	// current day open
+
+
+  GpDown=IIf(GapDown(),True,False);
+  GpUp=IIf(GapUp(),True,False);
+
+  PlotShapes(IIf(GpDown AND NewDay , shapeStar, shapeNone),colorRed, 0,H, Offset=-45);
+  PlotShapes(IIf(GpUp AND NewDay, shapeStar, shapeNone),colorGreen, 0,H, Offset=-45);
+
+    Sell1=Cover1=False;
+
+
+
+
+  DayOpenClose=ValueWhen(NewDay,C,1); 
+  DayOpenHigh=ValueWhen(NewDay,H,1); 
+  DayOpenLow=ValueWhen(NewDay,L,1); 
+
+
+
+
+  Buy1=IIf(Cross(H,DayH) AND GpUp AND NewDay,True,False);
+  Short1=IIf(Cross(L,DayL) AND GpDown AND NewDay,True,False);
+
+  Buy1=ExRem(Buy1,Short1 OR EndDay);
+  Short1=ExRem(Short1,Buy1 OR EndDay);
+
+  Buyflag2=Shortflag2=False;
+
+
+
+  TempGapBuy=Buy1;
+  TempGapShort=Short1;
+
+  TempGapBuy=ExRem(TempGapBuy,EndDay);
+  TempGapShort=ExRem(TempGapShort,EndDay);
+
+  SetPositionSize(100,spsShares);
+
+
+
+  Buy=TempGapBuy;
+  Short=TempGapShort;
+
+  BuyPrice=ValueWhen(Buy,C);
+  ShortPrice=ValueWhen(Short,C);
+
+  Buyflag=Flip(Buy,endday);
+  Shortflag=Flip(Short,endday);
+
+  Sell=IIf(Buyflag AND H>BuyPrice* (1+target/100) OR EndDay,True,False);
+  Cover=IIf(Shortflag AND L<ShortPrice*(1-target/100) OR EndDay,True,False);
+
+  Sell=ExRem(Sell,Buy);
+  Cover=ExRem(Cover,Short);
+
+  PlotShapes(IIf(Buy, shapeSquare, shapeNone),colorGreen, 0, L, Offset=-40);
+  PlotShapes(IIf(Buy, shapeSquare, shapeNone),colorLime, 0,L, Offset=-50);                      
+  PlotShapes(IIf(Buy, shapeUpArrow, shapeNone),colorWhite, 0,L, Offset=-45); 
+  PlotShapes(IIf(Short, shapeSquare, shapeNone),colorRed, 0, H, Offset=40);
+  PlotShapes(IIf(Short, shapeSquare, shapeNone),colorOrange, 0,H, Offset=50);                      
+  PlotShapes(IIf(Short, shapeDownArrow, shapeNone),colorWhite, 0,H, Offset=-45);
+  PlotShapes(IIf(Sell, shapeStar, shapeNone),colorWhite, 0,H, Offset=-45);
+  PlotShapes(IIf(Cover, shapeStar, shapeNone),colorWhite, 0,H, Offset=-45);
+_SECTION_END();
+_SECTION_BEGIN("Price1");
+SetChartOptions(0,chartShowArrows|chartShowDates);
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, Hi %g, Lo %g, Close %g (%.1f%%) {{VALUES}}", O, H, L, C, SelectedValue( ROC( C, 1 ) ) ));
+Plot( C, "Close", ParamColor("Color", colorDefault ),  styleNoTitle | ParamStyle("Style") | GetPriceStyle() );
+_SECTION_END();
+
+
+Filter=Buy OR Short ;
+AddColumn(Buy ,"Short",1,colorBlack,IIf(GpUp,colorGreen, colorRed)) ;
+AddColumn(Short,"Cover",1,colorBlack,IIf(GpUp,colorGreen, colorRed)) ;
+AddColumn(IIf(Buy,BuyPrice,ShortPrice),"SignalPrice",1,colorBlack,IIf(GpUp,colorGreen, colorRed)) ;
+AddColumn(IIf(Buy,BuyPrice* (1+target/100),ShortPrice* (1-target/100)),"TargetPrice",1,colorBlack,IIf(GpUp,colorGreen, colorRed)) ;
+AddColumn(TimeNum(),"Signal Time",1,colorBlack,IIf(GpUp,colorGreen, colorRed)) ;
+AddColumn(IIf((Buyflag AND H>BuyPrice* (1+target/100)) OR (shortflag AND L<(ShortPrice* (1-target/100))),True,False),"Target Achived",1,colorBlack,IIf(GpUp,colorGreen, colorRed));

@@ -1,0 +1,48 @@
+//printf( "Bid = "+GetRTData("Bid")+"Ask = "+GetRTData("Ask")+"Last = "+GetRTData("Last")+"Vol = "+GetRTData("TradeVolume")+"EPS = "+GetRTData("EPS")+"52week high = "+GetRTData("52weekhigh")); 
+//printf("Spread" + (GetRTData("Bid")-GetRTData("Ask")));
+spread=(GetRTData("Bid")-GetRTData("Ask"));
+FQ=spread/4;
+BP=GetRTData("Bid")+FQ;
+SP=GetRTData("Ask")-FQ;
+printf("Buy price\t"+BP+"\nSell Price\t"+SP);
+
+
+
+_SECTION_BEGIN("Bid Vs Ask Dashboard");
+
+messageboard = ParamToggle("Message Board","Show|Hide",1);
+if (messageboard == 1 )
+{
+Bid = GetRTData("Bid"); 
+Ask = GetRTData("Ask"); 
+
+GfxSelectFont( "Tahoma", 13, 100 );
+GfxSetBkMode( 1 );
+GfxSetTextColor( colorWhite );
+GfxSelectSolidBrush( colorBlue ); // this is the box background color
+
+pxHeight = Status( "pxchartheight" ) ;
+xx = Status( "pxchartwidth");
+
+x = 1000;
+x2 =1090;
+ 
+y = pxHeight-400;
+ 
+GfxSelectPen( colorGreen, 1); // broader color
+GfxRoundRect( x, y - 98, x2, y-50 , 7, 7 ) ;
+GfxTextOut( ( "Bid"),x+13,y-100);
+GfxTextOut( (" "),x+27,y-100);
+GfxTextOut( (""+Bid), x+13, y-80) ; // The text format location
+
+GfxSelectSolidBrush( colorOrange ); 
+ 
+GfxSelectPen( colorGreen, 1); // broader color
+GfxRoundRect( x+92, y - 98, x2+92, y-50 , 7, 7 ) ;
+GfxTextOut( ( "Ask"),x+13+92,y-100);
+GfxTextOut( (" "),x+27+92,y-100);
+GfxTextOut( (""+Ask), x+13+92, y-80) ; // The text format location
+
+}
+
+_SECTION_END();
