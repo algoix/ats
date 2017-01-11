@@ -1,0 +1,76 @@
+
+http://www.amibroker.com/library/detail.php?id=794
+
+//PRICE SWING CHARTS are built in time-independent squared charts, where reversals are drawn only when price decline from any top (or rise from any bottom) by a quantity (in cents, or dollar) greater than the base swing, which is a parameter.
+
+//Price swing charts are essential to the swing trader, and they should be used in conjuction with time-swing charts (Gann Swing charts) and bar charts, candle charts and close only charts. 
+
+HOW TO USE THE PRICE SWING CHART
+the code I am providing will allow you to mark the 25,33,50,66,75% retracement of all the swings. In order to see them select "Price Style DOTS" from the menu or press the equivalent hot-key. Select any other style to remove the marks.
+
+Formula prints (1) level of the swing (2) move from previous level (3) date and time (4) Day of week DY and (5) DUration as measured in bars.
+
+With little practice you should become able to read the strenght and weakness of the markets from
+
+(a) position of tops and bottoms with respect to old tops and bottoms
+(b) amplitude of the swing. For example, in 5m soybeans markets, standard declines are 3c, 10c and 12c. Therefore if a mkt declines in excess of 3c is weaker because it was noy supported at 3c, and if it declines just less than 12c is stronger becasue it is meeting support that prevents it to decline 12 full cents. If it declines more than 12c is weaker. and so on...
+(c) the retracement marks can be used by the same token: if it retraces little more than 50% is weaker than if it held just above 50% mark and so on.
+(d) retracement mark can be used very effectively (at least in the Soy market) to project the price diagonally: e.g. see how many times the swing ends when its 50% retraments lies near or exactly on an old top or bottom.
+(e) Point (d) can also be used to gauge the mkt in the same way we discussed in (c).
+
+Use Price style dots to plot the duration of the swing in histogram and study how the duration can sometime help to spot a reversal.
+
+THE TRICK
+In order to realize a real swing chart Amibroker requires the use of the FOR cycle, which results in slowness sometimes not acceptable. Although I cannot guarantee that this code will completely eliminate the problem (if you have price arrays too large) you should find it very beneficial.
+
+The array is created only when needed (or each minute at the lastest) and afterward stored on a text file. When Amibroker refreshed, the data are loaded from the file and the FOR cycle is skipped, resulting in a great speed (at least for me). Swing array is forced- to be recalculated when you change the paramter. 1 minute update are more than enough for a Price Swing Chartm which -- remember -- convey to you the information of a greater timeframe and therefore does not need to be updated so frequently.
+
+For Gann swing charts I have adopted anouther solution to speed up the refresh, becasue they need to be updated quite frequently.
+
+AROON
+http://www.amibroker.com/library/detail.php?id=2
+Aroon is Sanskrit word meaning "dawn's early light" or the change from night to day. The Aroon indicator allows you to anticipate changes in security prices from trending to trading range. The indicator uses two lines: Aroon Up and Aroon Down. Aroon Down is a measure of how close the current bar is to the most recent lowest Low bar found in the last N bars. Aroon Up is a measure of how close the current bar is to the most recent highest High bar found in the last N bars. Additionally Aroon oscillator can be defined as the difference between the Aroon Up and Aroon Down indicators. For more information on the Aroon indicator see the article written by Tushar Chande in the September 1995 issue of Technical Analysis of Stocks & Commodities magazine.
+
+Aroon indicator ranges from 0 to 100 and it is drawn with additional 30/70 levels. The default period is 14 days. The indicator works as follows: if a security makes a new 14-day high, the Aroon Up = 100; when the security makes a new 14-day low, the Aroon Down = 100; when there was no new high in 14 days, the Aroon Up = 0; and consequently when there was no new low for 14 days, the Aroon Down = 0.
+
+Aroon indicator is an another way (in addition to VHF and ADX indicators) of detemining if market is trending or not. 
+
+
+TECHNICAL_SELECT
+//##########
+
+/*
+This Exploration is a scan for 24 different buy or sell signals.
+
+The aim of the exploration is to find days when many bullish or bearish signs are triggered at the same time. If 5 indicators give a buy advice, it is more reliable than one.
+I invite everybody to add your own systems to these ones, to improve the reliability. And experimented technical analysts could give advices to avoid the trap of using several different indicators all working off the same input data.
+
+Vol Index: this column is the ratio of today's volume to the 14-day average volume.
+This column should be sorted Descending. The best signals are occur when VolIndex is at least 2 or higher.
+
+PCL[up]: Piercing Line, "up" signifies Bullish.
+MDS[up]: Morning Doji Star
+BLE[up]: Bullish Engulfing
+HAM[up]: Hammer
+BRE[dn]: Bearish Engulfing, "dn" signifies Bearish.
+DCC[dn]: Dark Cloud Cover
+EDS[dn]: Evening Doji Star
+TDREI[up] & [dn]: Tom DeMark's Range Expansion Index 
+KUP[up] & [dn]: Keltner Bands -DIMITRIS TSOKAKIS
+RSI[up] & [dn]: Relative Strength Index 14 periods
+MFI[up] & [dn]: Money Flow Index
+ST2[up] & [dn]: Stochastic Slow - Donald Dalley
+DIV[up] & [dn]: % R divergence  -DIMITRIS TSOKAKIS
+KST[up] & [dn]: MARTIN PRING'S KST MOMENTUM SYSTEM -TJ
+COP[up]: Coppock Curve TJ
+SMH[up] & [dn]: smash day pattern. DIMA
+CHK[up] & [dn]: Chaikin Money Flow. Thierry Huitel
+
+A "1" in the column signifies TRUE, a "0" indicates no signal.
+------------------------------------------------------------------*/
+
+
+
+
+
+

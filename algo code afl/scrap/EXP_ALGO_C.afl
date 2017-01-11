@@ -1,0 +1,199 @@
+
+_SECTION_BEGIN("EXP_ALGO");
+AutoTradingParam = True;         //ParamToggle("AutoTrading","Off|On",0);
+SubmitOrders = True;             //ParamToggle("Create or Transmit","Create Only|Create and Transmit",False);
+Tracing = False;
+MarketOpen = 093000;//09:30:00;
+MarketClose = 160000;//04:00:00 
+MarketON = TimeNum() >= MarketOpen AND Now( 4 ) < MarketClose;
+MarketOFF = Now( 4 ) >= MarketClose ;//day's over
+function SayNotTooOften( text, Minperiod ) 
+{ 
+   elapsed=GetPerformanceCounter()/1000; 
+   Lastelapsed = Nz( StaticVarGet("lastsaytime") ); 
+
+   if( elapsed - Lastelapsed > Minperiod ) 
+   { 
+     StaticVarSet("lastsaytime", elapsed ); 
+     Say( text ); 
+   } 
+}
+
+// Interactive Brokers ticker symbols may have unwanted characters for our static variable names. Remove them.
+
+ABName = StrMid(Name(),0,3) + StrMid(Name(),4,3);
+IBName = Name();
+	
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+if( IsNull( AutoTrading ) ) 
+	StaticVarSet("AutoTrading"+ABName,0);
+
+if ( AutoTrading==0 && AutoTradingParam )
+{
+  // About to start AutoTrading after it's been off, so clear all order statuses. 
+        StaticVarSetText("OrderID"+ABName,"");
+        StaticVarSetText("OrderIDLMT"+ABName,"");
+        StaticVarSetText("OrderIDSTP"+ABName,"");
+        StaticVarSetText("OrderStatus"+ABName,"");
+        StaticVarSetText("OrderLMTStatus"+ABName,"");
+        StaticVarSetText("OrderStatusSTP"+ABName,"");
+}
+if ( AutoTrading && AutoTradingParam==0 )
+{
+  // About to stop AutoTrading after it's been on, so clear all order statuses.
+
+        StaticVarSetText("OrderID"+ABName,"");
+        StaticVarSetText("OrderIDLMT"+ABName,"");
+        StaticVarSetText("OrderIDSTP"+ABName,"");
+        StaticVarSetText("OrderStatus"+ABName,"");
+        StaticVarSetText("OrderLMTStatus"+ABName,"");
+        StaticVarSetText("OrderStatusSTP"+ABName,"");
+}
+
+if (AutoTradingParam) 
+	StaticVarSet("AutoTrading"+ABName,1);
+else  
+	StaticVarSet("AutoTrading"+ABName,0);
+
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+ 
+Filename 	= _DEFAULT_NAME();
+
+//BID-ASK based order
+spread=(GetRTData("Ask")-GetRTData("Bid"));
+FQ=spread;
+BP=GetRTData("Bid")+FQ*0.1;//easy to buy
+SP=GetRTData("Ask")-FQ*0.1;//strict to sell
+//System to work after certain change 
+nbar=10;
+input = LinRegSlope((C+O)/2,nbar);
+pi=4*atan(1);
+RTD=180/pi;
+DTR=pi/180;
+sinewave=sin(input*DTR)*1000;
+bu=Cross(LLV(sinewave,30)*0.99,sinewave);
+se=Cross(sinewave,HHV(sinewave,30)*0.99) ;
+Buy=bu AND C<MA(C,30) AND ROC(C,5)<(-0.01);
+Short=se;
+Sell=Short;
+printf("\nMy BUY price"+"\t"+BP);
+printf("\nMy SELL price"+"\t"+SP+"\n");
+Plot(SineWave , "SineWave ", colorBlue, styleLine);
+PlotShapes( Buy* shapeUpArrow , colorGreen, 0);
+PlotShapes( Short* shapeDownArrow , colorRed, 0); 
+
+// Following lines required because I'll only enter once the price moves in my desired direction
+ShortPrice = Min(Ref(C,-1),SP); //Or as appropriate for your trading rules.
+BuyPrice = Max(Ref(C,-1),BP); //Or as appropriate for your trading rules.
+
+
+PrevDT = StaticVarGet("DateTime"+ABName);
+DT = LastValue(DateTime());
+NewBar = DT != PrevDT;                        
+StaticVarSet("DateTime"+ABName,DT);
+
+if( NewBar )
+{
+    // Clear all status so we can place a new order on each bar. Later, the status variables are checked to ensure  that we place no more than 1 order on each bar.
+
+    StaticVarSetText("OrderID"+ABName,"");
+    StaticVarSetText("OrderIDLMT"+ABName,"");
+    StaticVarSetText("OrderIDSTP"+ABName,"");
+    StaticVarSetText("OrderStatus"+ABName,"");
+    StaticVarSetText("OrderLMTStatus"+ABName,"");
+    StaticVarSetText("OrderStatusSTP"+ABName,"");
+}
+ 
+LastBuy = LastValue(Buy);
+LastShort = LastValue(Short);
+LastShortPrice=LastValue(ShortPrice);
+LastBuyPrice=LastValue(BuyPrice);
+
+Filter=Buy OR Short;
+
+IBPosSize=0;
+
+ibc = GetTradingInterface("IB");
+IBcStatus = ibc.IsConnected();
+
+
+IBcStatusString = WriteIf(IBCStatus==0,"TWS Not Found",WriteIf(IBCStatus==1,"Connecting to TWS", WriteIf(IBCStatus==2,"TWS OK", WriteIf(IBCStatus==3,"TWS OK (msgs)",""))));
+
+// Work out how much money there is and adjust risk size
+
+CashBalanceStr = ibc.GetAccountValue("NetLiquidationByCurrency");
+if (CashBalanceStr == "")
+    CashBalance = 0;
+else
+    CashBalance = StrToNum(CashBalanceStr);
+
+
+OldOrderID = StaticVarGetText("OrderID"+ABName);
+if (AutoTrading == 0 && OldORderID == "" && (LastBuy || LastShort))
+{
+    // If there would have been an order during Autotrading, then create a dummy OID to test all other code paths
+    // e.g. logging, explore output etc.
+    StaticVarSetText("OrderID"+ABName,"DUMMY");
+}
+
+if( IBcStatus AND AutoTrading AND LastValue(MarketON) )
+{
+    OrderID = StaticVarGetText("OrderID"+ABName);
+    IBPosSize = ibc.GetPositionSize( IBName );
+    BuyPending=ibc.IsOrderPending(OrderID);
+    SellPending=ibc.IsOrderPending(OrderID);
+    averageprice=0;
+    openpos = ibc.GetPositionList();   
+        for( i = 0; ( symbol = StrExtract( openpos, i ) ) != ""; i++ ) 
+		{ 
+			if(symbol==Name())
+			{
+			aprice = ibc.GetPositionInfo(symbol, "Avg. cost");
+			averageprice=aprice; 
+			} 
+		} 
+			// Only enter once the price moves in my desired direction, otherwise wait until next run of the exploration and check again, and again., ...
+    if( LastBuy AND OrderID == "" )  
+    {
+    }
+
+	// Only enter once the price moves in my desired direction, otherwise wait until next run of the exploration
+	//     and check again, and again., ...
+    if( LastShort AND OrderID == "")
+ 
+    {
+    }
+   
+    if(BuyPending AND SellPending)
+ 
+    {
+				ibc.CancelAllPendingOrders( );
+				ibc.CancelOrder();  
+					
+	}
+    
+
+}
+   
+
+
+
+Seconds = int( GetPerformanceCounter()/1000);
+Event =  Seconds%87 == 0 ; 
+if ( Event  ) 
+{
+	Executed =  Nz ( StaticVarGet ( "Executed"));
+	if (!Executed)
+	{
+		ShellExecute("C:\\Program Files\\AmiBroker\\EXP_ALGO_C.js", "",""); 
+		StaticVarSet ( "Executed", 1 ); 
+	}
+}
+else
+StaticVarSet ( "Executed", 0); 
+
+RequestTimedRefresh(1); 
+Title = "Event = " + Event + 
+"\n";
+_SECTION_END();
+

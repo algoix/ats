@@ -1,0 +1,1477 @@
+function PercentR(len)
+{
+ return -100 * ( HHV( H,len) - C )/( HHV( H,len ) - LLV( L,len) ); 
+}
+
+function SwingIndex( Limit )
+{
+ Hy = Ref( H, -1 );
+ Cy = Ref( C, -1 );
+ Ly = Ref( L, -1 );
+ Oy = Ref( O, -1 );
+  
+ r1 = abs( H - Cy );
+ r2 = abs( L - Cy );
+ r3 = abs( H - L );
+ r4 = abs( Cy - Oy );
+ 
+ k = Max( r1, r2 ); 
+ 
+ r = IIf( r1 >= Max( r2, r3 ), r1 - r2/2 + r4/4,
+     IIf( r2 >= Max( r1, r3 ), r2 - r1/2 + r4/4,
+          r3 + r4/4 ) );
+ 
+ return IIf( r == 0, 0, 50 * ( ( C - Cy + 0.5 * ( C - O ) + 0.25 * ( Cy - Oy ) ) / r ) * k/Limit );
+}
+  
+function AccumulationSwingIndex( Limit )
+{
+  return Cum( SwingIndex( Limit ) );
+}
+
+period = 15;
+Pds=15;
+len=15;
+
+VolAvg = MA( V, len );
+VolumeIdx = V / VolAvg;
+AvgRange = Sum( abs(O-C),len )/len;
+//1//
+Var=MACD();
+Up=IIf(Var>Ref(Var,-1),abs(Var-Ref(Var,-1)),0);
+Dn=IIf(Var<Ref(Var,-1),abs(Var-Ref(Var,-1)),0);
+Ut=Wilders(Up,Pds);
+Dt=Wilders(Dn,Pds);
+RSIt=100*(Ut/(Ut+Dt));//1//
+HighMom = H - Ref( H, -2 );
+LowMom = L - Ref( L, -2 );
+Cond1 = ( H >= Ref( L,-5) OR H >= Ref( L, -6 ) );
+Num = IIf( cond1, HighMom + LowMom, 0 );
+Den = abs( HighMom ) + abs( LowMom );
+TDREI = 100 * Sum( Num, 5 )/Sum( Den, 5 ) ;//2//
+highm = IIf( H > Ref( H, -1 ), H - Ref( H, - 1), 0 );
+lowm = IIf( L < Ref( L, -1 ), Ref( L, - 1 ) -L, 0 );
+dem = 100 * Sum( highm, 13 )/( Sum( lowm, 13 ) + Sum( highm, 13 ) );//3//
+function ProjOsc(Pds) {
+
+// Slope of High {n period regression line of High)}
+SlopeHigh = ((Pds * (Sum( Cum(1) * High, Pds))) - (Sum( Cum(1),Pds) * (Sum(High, Pds)))) / ((Pds * Sum( Cum(1) ^ 2 , Pds)) - (Sum(Cum(1),Pds) ^2));
+
+//Slope of Low {n period regression line of Low}
+SlopeLow = ((Pds * (Sum( Cum(1) * Low, Pds))) - (Sum( Cum(1), Pds) * (Sum(Low, Pds)))) / ((Pds * Sum( Cum(1)^ 2, Pds)) - ( Sum(Cum(1),Pds) ^2));
+
+//Upper Projection Band
+UpProjBand = 0;
+for (i=0; i<Pds;i++) {
+UpProjBand =
+Max(Max(Ref(High,-i)+i*slopehigh,Ref(High,-i-1)+(i+1)*slopehigh),UpProjBand);
+}
+
+//Lower Projection Band
+LoProjBand = 10000;
+for (i=0; i<Pds;i++) {
+LoProjBand =
+Min(Min(Ref(Low,-i)+i*slopelow,Ref(Low,-i-1)+(i+1)*slopelow),LoProjBand);
+}
+
+//Projection Oscillator
+ProOsc = 100 * (Close - LoProjBand) / (UpProjBand - LoProjBand);
+
+return ProOsc;
+
+}
+aa= ProjOsc(Pds);//5//
+Stda=MA(StDev(C,8),5);//by default 5 is maperiod n 8 is stdevperiod
+V1=StDev(C,8)/Stda;
+TD=int(Pds/V1);//6//
+upday=IIf(C>Ref(C,-1),C-Ref(C,-1),0);
+downday=IIf(Ref(C,-1)>C,Ref(C,-1)-C,0);
+Su=Sum(upday,TD);
+Sd=Sum(downday,TD);
+M1=(Su-Sd);
+M2=abs(Su+Sd);
+DMI=50*(M1+M2)/M2;//7//
+StdOsc=( ( C+2 * StDev( C,pds ) - MA( C,pds ) ) / ( 4 * StDev( C,pds ) ) ) * 100;//8//
+len=15;
+KUP=EMA((H+L+C)/3,len)+EMA(H-L,len);
+KDOWN=EMA((H+L+C)/3,len)-EMA(H-L,len);
+kud=KUP-KDOWN;//9//
+/* %R, ema 9 and divergences */
+R=-100*((HHV(High,len)-Close))/(HHV(High,len)-LLV(Low,len));
+DIVR=(R-Ref(R,-1))*(C-Ref(C,-1));//10//
+KST =  (MA(ROC(Close,10),10) * 1) + (MA(ROC(Close,15),10) * 2) +(MA(ROC(Close,20),10) * 3) +(MA(ROC(Close,30),15) * 4);
+copBuy = IIf((EMA( ROC( MA( C, 5 ), 15 ), 5) / 100) < 0, 1, 0);//11//
+sk =100*( ( RSI( period ) - LLV( RSI( period ) , period ) ) / ( ( HHV( RSI(period ) , period ) ) - LLV(RSI( period ), period ) ) );//12//
+A = Ema((CLOSE-LLV(LOW,15))/(HHV(H,15)-LLV(L,15)),4)*100;
+DSS = ema((A-LLV(A,15))/(HHV(A,15)-LLV(A,15)),4)*100;//Double Smoothed Stochastic from W.Bressert ( oversold=20, overbought=80)//13//
+CHL = Max(C,15 )-Min(C,15);
+OHL = Max(O,15)-Min (O,15);
+ratio=CHL/OHL;//14//
+MAH = MA(Max(H,15),5);
+MAL = MA(Min(L,15),5);
+spread = MAH - MAL;//15//
+CS = LinRegSlope(O,15);
+CI=LinRegIntercept(O,15);
+y=CI+CS*Ref(O,-1);
+s=y-O;//16//
+m=Ref((H+C+L+O)/4,-1);
+CS = LinRegSlope(m, 30);
+CI=LinRegIntercept(m, 30);
+y=m-(CI+CS*m);//17//
+//
+ND = Day() != Ref(Day(), -1);
+P = (H + L) / 2;
+VWP = P * V;
+VWAPbasic=0;
+BI = BarIndex();
+BeginBI = ValueWhen(ND, BI);
+BeginBI = BeginBI[BarCount -1];
+if ( BeginBI < BarCount -1 )
+{
+Inrange = BI >= BeginBI;
+CumV = Cum(V * InRange);
+CumVWP = Cum(VWP * InRange);
+VWAPb = CumVWP / CumV;
+S = Cum(Ref(CumV, -1) * V * (P - Ref(VWAPb, -1))^2 / CumV);
+Variance = S / CumV;
+SD = sqrt(Variance);
+VWAPbasic = IIf(InRange, VWAPb, Null);
+}
+// Determines trend direction using DMI indicators//18//
+PDIFilter = PDI(period) > MDI(period);
+MDIFilter = MDI(period) > PDI(period);
+VOLFilter = LLV(V,30) > 250000; // Volume Filter - LLV(V,period) > # / Returns TRUE if 3 to 7 day pullback in up or down trend
+UPB3 = H <= Ref(H,-1) AND Ref(H,-1) <= Ref(H,-2) AND Ref(H,-2) <= Ref(H, -3);
+UPB4 = UPB3 AND Ref(H,-3) <= Ref(H,-4);
+UPB5 = UPB4 AND Ref(H,-4) <= Ref(H,-5);
+UPB6 = UPB5 AND Ref(H,-5) <= Ref(H,-6);
+UPB7 = UPB6 AND Ref(H,-6) <= Ref(H,-7);
+DPB3 = L >= Ref(L,-1) AND Ref(L,-1) >= Ref(L,-2) AND Ref(L,-2) >= Ref(L, -3);
+DPB4 = DPB3 AND Ref(L,-3) >= Ref(L,-4);
+DPB5 = DPB4 AND Ref(L,-4) >= Ref(L,-5);
+DPB6 = DPB5 AND Ref(L,-5) >= Ref(L,-6);
+DPB7 = DPB6 AND Ref(L,-6) >= Ref(L,-7);
+
+// New 2 month low has occurred in the last 5 days?
+NewHighs   = IIf(HHV(H,5) >= HHV(H,40), 1, 0);
+NewLows    = LLV(L,5) <= LLV(L,40);
+// Are moving averages lined up correctly?
+BullishMAs = IIf(MA(C,10) >= EMA(C,20) AND EMA(C,20) >= EMA(C,30), 1, 0);
+BearishMAs = IIf(MA(C,10) <= EMA(C,20) AND EMA(C,20) <= EMA(C,30), 1, 0);
+
+BSign = IIf(PDIFilter AND (UPB3 OR UPB4 OR UPB5 OR UPB6 OR UPB7) AND NewHighs AND BullishMAs AND VOLFilter, 1, 0); // "Buy Signal"
+BStop = IIf(BSign == 1, H + .125, 0); // "Buy Stop"
+SSign = IIf(MDIFilter AND (DPB3 OR DPB4 OR DPB5 OR DPB6 OR DPB7) AND NewLows AND BearishMAs AND VOLFilter, 1, 0); // "Sell Signal"
+SStop = IIf(SSign == 1, L - .125, 0); // "Sell Stop"
+/////////////
+//Just do this once as an array. Saves 40% the compute time from ~ 1 second to ~ .6 seconds
+AvgPrice = ( O + H + L + C ) / 4;  
+ 
+// Store true/false based on a new calendar day...
+// Added Weekly, Monthly breaks.
+// Also for futures, need to add break at new trading Day, which is NOT midnight.
+ 
+
+newPeriod = Day() != Ref( Day(), -1 );
+
+ 
+//--Setup-----------
+ 
+bi = BarIndex();        // Just shorthand
+StartBar = StrToNum("2");   //1st bar == 0. Set to 1 so Ref(xxx, -1) doesn't give an error
+EndBar = BarCount -1;
+ExtraBarsRequired = 0;
+ 
+//CalcRangeAll = ParamToggle( "Calc ALL or VISIBLE?", "VISIBLE|ALL", 0 );       //Option to compute all bars in case of Backtesting or Explore if you add this kind of code.
+ 
+if ( Status( "action" ) < 3 )        // Limit to visible range unless we're doing Backtest, Explore, Scan, Optimize.
+    // In other words, for viewing/commentary we only compute what we can see.
+    // Saves add'l 85% the compute time from ~ .6 second to ~ .09 seconds.
+{
+    //This code finds only the VISIBLE chart area, which may or may not be the most recent day. This let's me look at any day for evaulation purposes.
+    FirstVisibleBar = FirstVisibleValue( bi );
+    _TRACE( "1st Visible: " + FirstVisibleBar );
+    LastVisibleBar = LastVisibleValue( bi );                        //Testing shows this returns BarIndex (0 based) values. So, if you want to use in a loop the last value IS the last bar.
+    VisibleBars = LastVisibleBar - FirstVisibleBar;         //Used in trouble-shooting.
+    _TRACE( "1st Visible: " + FirstVisibleBar + "    Last Visible: " + LastVisibleBar + "    #bars: " + VisibleBars );
+ 
+    StartBar = FirstVisibleBar;     //We get variable results when there are not 2 periods of data available so we won't show them at all.
+    EndBar = LastVisibleBar;
+    flag = StrToNum( "0" );             //Force a numeric value
+ 
+    for ( k = FirstVisibleBar; k > 0; k-- )
+    {
+        if ( newPeriod[k] )
+        {
+            flag++;
+ 
+            if ( flag == 2 )                            //Need to lookback 2 periods if possible
+            {
+                StartBar = k;                           //Set starting location
+                k = 0;                                      //End the loop
+            }
+        }
+    }
+ 
+    if ( flag < 2 )                                              //We have less than 2 periods of history to the left, so we must start displaying no sooner than the 1st newPeriod that is on-screen
+    {
+        for ( k = 1; k < EndBar; k++ )
+        {
+            if ( newPeriod[k] )
+            {
+                StartBar = k;
+                k = EndBar;
+            }
+        }
+    }
+}
+ 
+_TRACE("1st Required: " + StartBar + "    Last Required: " + EndBar + "    Extra Bars: " + ExtraBarsRequired + "    Bar in Database: " + BarCount );
+ 
+// Initialize loop variables
+SumPriceVolume = 0;
+totVolume = 0;
+VWAP = 0;
+ VWAPtemp=0;
+stddev = 0;
+newPeriodindex = EndBar;        //Move way out until we find a "real one"
+Variance = 0;
+//Initialize the plotted variables for early data we cannot compute without getting variable results.
+VWAP = C[1];
+stddev_1_pos = stddev_1_neg = stddev_2_pos = stddev_2_neg = stddev_3_pos = stddev_3_neg = C[1];
+ 
+// we must use a loop here because we need to save the vwap for each bar to calc the variance later
+ 
+for ( i = startBar; i <= EndBar; i++ )
+{
+    // only want to reset our values at the start of a new period
+    if ( newPeriod[i] )
+    {
+        SumPriceVolume = 0;
+        totVolume = 0;
+        newPeriodindex = i;  // this is the index at the start of a new period
+        Variance = 0;
+    }
+ 
+    // Sum of Volume*price for each bar
+    sumPriceVolume += AvgPrice[i] * ( Volume[i] );
+ 
+    // running total of volume each bar
+    totVolume += ( Volume[i] );
+ 
+    if ( totVolume[i] > 0 )
+    {
+        VWAP[i] = Sumpricevolume / totVolume ;
+        VWAPtemp = VWAP[i];
+    }
+ 
+    // now the hard part...calculate the variance...
+    // a separate calc from the start of each day - note it requires the vwap from above
+    // also note, we calculate starting at the first bar in the new day to today to the curent bar
+    Variance = 0;
+ 
+    for ( j = newPeriodindex; j < i; j++ )
+    {
+        Variance += ( Volume[j] / totVolume ) * ( Avgprice[j] - VWAPtemp ) * ( Avgprice[j] - VWAPtemp );
+    }
+ 
+    sqrtVariance = sqrt( Variance );
+ 
+    stddev_1_pos[i] = VWAPtemp + sqrtVariance;
+    stddev_1_neg[i] = VWAPtemp - sqrtVariance;
+ 
+    stddev_2_pos[i] = VWAPtemp + sqrtVariance * 2;
+    stddev_2_neg[i] = VWAPtemp - sqrtVariance * 2;
+ 
+    stddev_3_pos[i] = VWAPtemp + sqrtVariance * 3;
+    stddev_3_neg[i] = VWAPtemp - sqrtVariance * 3;
+}
+ 
+//Prior period VWAP centerline
+///
+/*==============================================================================
+Global Settings
+==============================================================================*/
+SetFormulaName("TT Support Resistance 1.2");
+SetOption("InitialEquity", 100000);
+SetOption("NoDefaultColumns", True );
+SetOption("CommissionMode", 2); //$$ per trade
+SetOption("CommissionAmount", 0);
+SetOption("MarginRequirement", 10);
+SetOption("UsePrevBarEquityForPosSizing", True);
+SetOption("UseCustomBacktestProc", True );
+
+SetTradeDelays( 0, 0, 0, 0 );
+
+/*==============================================================================
+User-defined Functions
+==============================================================================*/
+function Support(p)
+{
+sup = LLV(low, p);
+sup[0] = low[0];
+p = min(p,BarCount); 
+for (i = 1; i < p; i++)
+{
+if(low[i] < sup[i-1]) sup[i] = low[i];
+else sup[i] = sup[i-1];
+}
+return sup;
+}
+
+function Resistance(p)
+{
+res = HHV(high, p);
+res[0] = high[0];
+p = min(p,BarCount); 
+for (i = 1; i < p; i++)
+{
+if(high[i] > res[i-1]) res[i] = high[i];
+else res[i] = res[i-1];
+}
+return res;
+}
+
+function OptimizeNot(a1, a2, a3, a4, a5)
+{
+return a2;
+}
+
+/*==============================================================================
+Entry and Exit Rules
+==============================================================================*/
+fast = 5;
+slow = 15;
+FastRes = Resistance(fast);
+FastSup = Support(fast);
+SlowRes = Resistance(slow);
+SlowSup = Support(slow);
+heat = 0.05;
+
+// determine longer term trend
+// Note: could have problem if current bar is outside of all previous bars
+// the trend can also be calculated within main loop, but put here for clarity
+//trend[0] = 0;
+trend=0;
+for(bar= 1; bar < BarCount; bar++) // bar must start from 1, otherwise trend calculation is wrong
+{
+if(high[bar] > SlowRes[bar-1]) trend[bar] = 1;
+else if(low[bar] < SlowSup[bar-1]) trend[bar] = -1;
+else trend[bar] = trend[bar-1];
+}
+
+LastPosition = 0; // 1 - long; -1 - short
+PositionRiskStop = 0;
+
+Buy = Sell = Short = Cover = 0; // this has to be set otherwise they are undefined!!! weird
+// main loop
+for(bar = 5; bar < BarCount-1; bar++) // give some bars for the system to stablize
+{
+// Exit position by protection stop
+if(LastPosition == 1)
+{
+// Sell at stop
+if(PositionRiskStop > low[bar] ) // skip if the signal price only touch (=) the low
+{
+// We just calculate the exact price to simulate Ed's skid
+stopPrice = PositionRiskStop;
+ff = min(open[bar], stopPrice) - low[bar];
+stopPrice = min(open[bar], stopPrice) - 0.5*ff;
+Sell[bar] = 1;
+SellPrice[bar] = stopPrice;
+TradePrice[bar] = stopPrice;
+LastPosition = 0;
+}
+else // move the protection stop
+{
+PositionRiskStop = FastSup[bar];
+}
+}
+else if(LastPosition == -1)
+{
+// Cover at stop
+if(PositionRiskStop < high[bar]) // skip if the signal price only touch (=) the high
+{
+stopPrice = PositionRiskStop;
+ff = high[bar] - max(open[bar], stopPrice);
+stopPrice = max(open[bar], stopPrice) + 0.5*ff;
+Cover[bar] = 1;
+CoverPrice[bar] = stopPrice;
+TradePrice[bar] = stopPrice;
+LastPosition = 0;
+}
+else // move the protection stop
+{
+PositionRiskStop = FastRes[bar];
+}
+}
+// Enter position only when last position has been closed
+else {
+if(trend[bar-1] == 1)
+{
+// buy at stop
+if( fastRes[bar-1] < high[bar])
+{
+ff = high[bar] - max(open[bar], FastRes[bar-1]);
+stopPrice = max(open[bar], FastRes[bar-1]) + 0.5*ff;
+f = heat/(FastRes[bar-1] - FastSup[bar-1]);
+Buy[bar] = 1;
+BuyPrice[bar] = stopPrice;
+PositionSize[bar] = f; //this value is passed to CBT for position sizing
+LastPosition = 1;
+PositionRiskStop = FastSup[bar];
+TradePrice[bar] = stopPrice;
+}
+}
+else if(trend[bar-1] == -1)
+{
+// short at stop
+if( FastSup[bar-1] > low[bar])
+{
+ff = min(open[bar], FastSup[bar-1]) - low[bar];
+stopPrice = min(open[bar], FastSup[bar-1]) - 0.5*ff;
+f = heat/(FastRes[bar-1] - FastSup[bar-1]);
+Short[bar] = 1;
+ShortPrice[bar] = stopPrice;
+PositionSize[bar] = f; //this value is passed to CBT for position sizing
+LastPosition = -1;
+PositionRiskStop = FastRes[bar];
+TradePrice[bar] = stopPrice;
+}
+}
+}
+}
+
+// close final day for accounting purpose
+bar = Barcount-1;
+if(LastPosition == 1) { Sell[bar] = 1; SellPrice[bar] = (low[bar]+close[bar])/2; }
+else if(LastPosition == -1) { Cover[bar] = 1; CoverPrice[bar] = (high[bar]+close[bar])/2; }
+
+///
+/*Closing Price Reversals Automatic Analysis by Larry Lovrencic*/
+CPRbuy=O<(L+0.2*(H-L)) AND C>(H-0.2*(H-L)) AND H<ref(H,-1) AND L<ref(L,-1) AND C>ref(C,-1);
+CPRsell=O>(L+0.8*(H-L)) AND C<(H-0.8*(H-L)) AND H>ref(H,-1) AND L>ref(L,-1) AND C<ref(C,-1);
+/*Hook Reversals Automatic Analysis by Larry Lovrencic*/
+HRbuy=O<(L+0.2*(H-L)) AND C>(H-0.2*(H-L)) AND H<ref(H,-1) AND L>ref(L,-1);
+HRsell=O>(L+0.8*(H-L)) AND C<(H-0.8*(H-L)) AND H<ref(H,-1) AND L>ref(L,-1);
+/*Island Reversals Automatic Analysis by Larry Lovrencic*/
+IRbuy=ref(L,-2)>ref(H,-1) AND L>ref(H,-1); 
+IRsell=ref(H,-2)<ref(L,-1) AND H<ref(L,-1);
+/*Key Reversals Automatic Analysis by Larry Lovrencic*/
+KRbuy=O<ref(C,-1) AND L<ref(L,-1) AND C>ref(H,-1);
+KRsell=O>ref(C,-1) AND H>ref(H,-1) AND C<ref(L,-1);
+/*Open/Close Reversals Automatic Analysis by Larry Lovrencic*/
+OCRbuy=O<(L+0.2*(H-L)) AND C>(H-0.2*(H-L)) AND H<ref(H,-1) AND L<ref(L,-1) AND C<ref(C,-1);
+OCRsell=O>(L+0.8*(H-L)) AND C<(H-0.8*(H-L)) AND H>ref(H,-1) AND L>ref(L,-1) AND C>ref(C,-1);
+/*Pivot Point Reversals Automatic Analysis by Larry Lovrencic*/
+PPRbuy=ref(L,-1)<ref(L,-2) AND ref(L,-1)<L AND C>ref(H,-1);
+PPRsell=ref(H,-1)>ref(H,-2) AND ref(H,-1)>H AND C<ref(L,-1);
+
+revbuy=CPRbuy or HRbuy or IRbuy or KRbuy or OCRbuy or PPRbuy;
+revsell=CPRsell or HRsell or IRsell or KRsell or OCRsell or PPRsell;
+////
+price =1;
+num =4;
+dist = 0.5 * ATR( 10 );
+rightfig = 7;
+xspace = 10;
+
+mHHV = HHV( H, num );
+mLLV = LLV( L, num );
+
+FirstVisibleBar = Status( "FirstVisibleBar" );
+Lastvisiblebar = Status( "LastVisibleBar" );
+
+for ( b = Firstvisiblebar + num; b <= Lastvisiblebar AND b < BarCount - num; b++)
+{
+    i = num;
+    ml = 0;
+    mu = 0;
+
+    while ( i > 0 )
+    {
+
+        if ( L[b] < L[b+i] )
+        {
+            ml++;
+        }
+
+
+        if ( H[b] > H[b+i] )
+        {
+            mu++;
+        }
+
+        i--;
+    }
+
+
+    if ( ml == num AND L[B] == mLLV[B] )
+    {
+        PlotText( "\n *\n", b, L[b], colorGreen );
+
+        if ( price == 1 )
+        {
+            p = StrRight( NumToStr( L[b], 4.1 ), rightfig );
+            PlotText( "\n\n" + p, b - 2 , L[b] , colorGreen );
+        }
+    }
+
+
+    if ( mu == num AND H[B] == mHHV[B] )
+    {
+        PlotText( " *\n", b, H[b], colorRed );
+
+        if ( price == 1 )
+        {
+            p = StrRight( NumToStr( H[b], 4.1 ), rightfig );
+            PlotText( p , b - 2 , H[b] + dist[b] + 1, colorRed );
+        }
+    }
+}
+
+
+
+// Vertical Daily Segment 
+segments = IIf( Interval() < inDaily, Day(), Month() );
+segments = segments != Ref( segments , -1 );
+
+
+/*
+Volbar = TimeFrameGetPrice( "V", in1Minute * 20, 0 );
+_TRACE( "Volbar = " + Volbar );
+*/
+// Seconds Remaining
+
+function GetSecondNum()
+{
+    Time       = Now( 4 );
+    Seconds    = int( Time % 100 );
+    Minutes    = int( Time / 100 % 100 );
+    Hours    = int( Time / 10000 % 100 );
+    SecondNum = int( Hours * 60 * 60 + Minutes * 60 + Seconds );
+    return SecondNum;
+}
+
+RequestTimedRefresh( 1 );
+TimeFrame = Interval();
+SecNumber = GetSecondNum();
+SecsLeft    = SecNumber - int( SecNumber / TimeFrame ) * TimeFrame;
+SecsToGo    = TimeFrame - SecsLeft;
+
+Secsleft = SecsToGo % 60 ;
+Minleft = int( SecsToGo / 60 );
+
+
+// Zig-Hi-Zag-Lo formula
+VolON =1;
+ZigON =1;
+pr = 0.015;
+
+pk = PeakBars( H, pr ) == 0;
+tr = TroughBars( L, pr ) == 0;
+
+zzHi = Zig( H, pr );
+zzLo = Zig( L, pr );
+Avg = ( zzHi + zzLo ) / 2;
+
+x = IIf( pk, zzHi, IIf( tr, zzLo, IIf( Avg > Ref( Avg, -1 ), H, L ) ) );
+zzHiLo = Zig( x, pr );
+
+zzup = zzHiLo > Ref( zzHiLo, -1 ) ;
+zzdn = zzHiLo < Ref( zzHiLo, -1 );
+
+//Swing Volume
+Volswing = Sum( V, BarsSince( zzup != Ref( zzup, -1 ) ) + 1 );
+SwingBar = BarsSince( zzHiLo != Ref( zzHiLo, -1 ) );
+///
+///
+SL = ( HHV( H, 26 ) + LLV( L, 26) )/2;// standard, base, or kijun-sen line
+TL = ( HHV( H, 9 ) + LLV( L, 9 ) )/2;// turning, conversion, or tenkan-sen line
+DL = Ref( C, 25 );						// delayed close price, or chikou span
+Span1 = Ref( ( SL + TL )/2, -25 );		//Span1 and Span2 define the clouds
+Span2 = Ref( (HHV( H, 52) + LLV(L, 52))/2, -25);
+above = IIf(TL>Span1 AND TL>Span2,1,0);
+within = IIf((TL>Span1 AND TL<Span2) OR (TL<Span1 AND TL>Span2) ,1,0);
+below = IIf(TL<Span1 AND TL<Span2,1,0);
+
+//ICHIMOKU=IIf((Cross(TL,SL) AND above),"STRONGbuy",IIf((Cross(TL,SL) AND within),"MEDIUMbuy",IIf((Cross(TL,SL) AND below),"WEAKbuy",IIf((Cross(SL,TL) AND below),"STRONGsell",IIf((Cross(SL,TL) AND within),"MEDIUMsell",IIf((Cross(SL,TL) AND above),"WEAKsell",0))))));
+ICHIMOKUbuy=IIf((Cross(TL,SL) AND above),3,IIf((Cross(TL,SL) AND within),2,IIf((Cross(TL,SL) AND below),1,0)));
+ICHIMOKUsell=IIf((Cross(SL,TL) AND below),3,IIf((Cross(SL,TL) AND within),2,IIf((Cross(SL,TL) AND above),1,0)));
+///
+/*H&S points and respective neckline is painted yellow, inverted H&S is light blue.
+H&S is considered as a bearish formation, confirmed after the neckline breakout.
+Inverted H&S is considered as a bullish formation, confirmed after the neckline breakout.
+Sensitivity is calibrated at the per=5 line. Increasing per makes the formula less sensitive.
+The last shoulder should be less than back=50 days ago and the distance between shoulders should be less than inter=100 days. */
+x = Cum(1);
+per = 5;
+back=50;
+inter=100;
+s11=H;s12=L;
+/* H & S */
+pR = PeakBars( s11, per, 1 ) == 0;
+endt1= LastValue(ValueWhen( pR, x, 1 ));
+medt1=LastValue(ValueWhen( pR, x, 2 ));
+startt1=LastValue(ValueWhen( pR, x, 3 ));
+dt1=endt1-startt1;
+C1=x==endt1 OR x==medt1 OR x==startt1;
+endR = LastValue(ValueWhen( pR, s11, 1 ) );
+medR=LastValue(ValueWhen( pR, s11, 2 ) );
+startR = LastValue( ValueWhen( pR, s11, 3  ));
+Filter1=medR>endR AND medR>startR AND abs(startR-endR)<0.02*(startR+endR) AND dt1<inter AND endt1>LastValue(x)-back;
+/*H&S Neck Line*/
+Aper=medt1-startt1;bper=endt1-medt1;
+La=  LastValue(ValueWhen(x==medt1,LLV(L,Aper)));
+Lb=LastValue(ValueWhen(x==-1+endt1,LLV(L,bper)));
+Fa=L==La AND x>startt1 AND x<medt1;
+Fb=L==Lb AND x>medt1 AND x<endt1;
+endt= LastValue(ValueWhen( Fb, x ));
+startt=LastValue(ValueWhen( Fa, x ));
+dtS =endt-startt;endS = Lb;startS = La;
+aS = (endS-startS)/dtS;bS = endS;
+trendlineS = aS * ( x  -endt ) + bS; 
+
+/*Inverted H & S*/
+tpR = TroughBars( s12, per, 1 ) == 0;
+tendt1=LastValue(ValueWhen(tpr,x,1));
+tmedt1=LastValue(ValueWhen(tpr,x,2));
+tstartt1=LastValue(ValueWhen(tpr,x,3));
+tdt1=tendt1-tstartt1;
+C2=x==tendt1 OR x==tmedt1 OR x==tstartt1;
+tendR = LastValue(ValueWhen( tpR, s12, 1 ) );
+tmedR=LastValue(ValueWhen( tpR, s12, 2 ) );
+tstartR = LastValue( ValueWhen( tpR, s12, 3  ));
+Filter2=tmedR<tendR AND tmedR<tstartR AND abs(tstartR-tendR)<0.02*(tstartR+tendR) AND tdt1<inter AND tendt1>LastValue(x)-back;
+
+/*Inverted H&S Neck Line*/
+tAper=tmedt1-tstartt1;tbper=tendt1-tmedt1;
+Ha=  LastValue(ValueWhen(x==tmedt1,HHV(H,tAper)));
+Hb=LastValue(ValueWhen(x==-1+tendt1,HHV(H,tbper)));
+tFa=H==Ha AND x>tstartt1 AND x<tmedt1;
+tFb=H==Hb AND x>tmedt1 AND x<tendt1;
+Rendt= LastValue(ValueWhen(tFb, x ));
+Rstartt=LastValue(ValueWhen( tFa, x ));
+Rdt =Rendt-Rstartt;endR = Hb;startR = Ha;
+aR = (endR-startR)/Rdt;bR = endR;
+trendlineR = aR * ( x  -Rendt ) + bR; 
+///
+function Cycle_Phase()
+{
+    Divider = Param( "Length", 4, 1, 20, 1, 1 );
+    SetBarsRequired( 100, 0 );
+    PriceIn = ( ( H + L ) / 2 );
+    DCPhase = RealPart = Imagpart = Period = Detrender = Q1 = I1 = jI = jQ = I2
+= Q2 = Re = Im = SmoothPeriod = DCPeriod = 0;
+    pi = 4 * atan( 1 );
+    DTR = pi / 180;
+    RTD = 180 / pi;
+    SmoothX = WMA( PriceIn * 100, Divider );
+
+    for ( i = 7;i < BarCount;i++ )
+    {
+        Detrender[i] = ( 0.0962 * SmoothX[i] + 0.5769 * SmoothX[i-2] - 0.5769 *
+SmoothX[i-4] - 0.0962 * SmoothX[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        Q1[i] = ( 0.0962 * Detrender[i] + 0.5769 * Detrender[i-2] - 0.5769 *
+Detrender[i-4] - 0.0962 * Detrender[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        I1[i] = Detrender[i-3];
+        jI[i] = ( 0.0962 * I1[i] + 0.5769 * I1[i-2] - 0.5769 * I1[i-4] - 0.0962
+* I1[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        jQ[i] = ( 0.0962 * Q1[i] + 0.5769 * Q1[i-2] - 0.5769 * Q1[i-4] - 0.0962
+* Q1[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        I2[i] = I1[i] - jQ[i];
+        Q2[i] = Q1[i] + jI[i];
+        I2[i] = 0.2 * I2[i] + 0.8 * I2[i-1];
+        Q2[i] = 0.2 * Q2[i] + 0.8 * Q2[i-1];
+        Re[i] = I2[i] * I2[i-1] + Q2[i] * Q2[i-1];
+        Im[i] = I2[i] * Q2[i-1] - Q2[i] * I2[i-1];
+        Re[i] = 0.2 * Re[i] + 0.8 * Re[i-1];
+        Im[i] = 0.2 * Im[i] + 0.8 * Im[i-1];
+        Period[i] = Nz( 360 / ( atan( Im[i] / Re[i] ) * RTD ) );
+        Period[i] = Max( Min( Period[i], 1.5 * Period[i-1] ), 0.67 * Period[i-1]
+);
+        Period[i] = Min( Max( Period[i], 6 ), 50 );
+        Period[i] = 0.2 * Period[i] + 0.8 * Period[i-1];
+        SmoothPeriod[i] = 0.33 * Period[i] + 0.67 * SmoothPeriod[i-1];
+        DCPeriod[i] = int( SmoothPeriod[i] + 0.5 );
+    }
+
+    return DCPeriod;
+}
+
+
+DCPeriod = Cycle_Phase();
+///
+twobarmode = 0;
+
+outsidebar = outside();
+insidebar = H <= Ref( H, -1 ) AND L >= Ref( L, -1 ); // built-in inside() works with < > instead of <= >=
+
+upbar = H > Ref( H, -1 ) AND L >= Ref( L, -1 );
+downbar = L < Ref( L, -1 ) AND H <= Ref( H, -1 );
+
+upbar2 = upbar OR ( outsidebar AND ref( downbar, 1 ) ) ;
+downbar2 = downbar OR ( outsidebar and ref( upbar, 1 ) );
+
+Poi =  outsidebar AND ref( insidebar, 1 );
+Poo =  outsidebar AND ref( outsidebar, 1 );
+Pooi = Poo AND ref( insidebar, 2 );
+Poio = Poi AND ref( outsidebar, 2 );
+Poii =  Poi AND ref( insidebar, 2 );
+Pooo = Poo AND ref( outsidebar, 2 );
+Poooi = Pooo AND ref( insidebar, 3 );
+Pooio = Pooi AND ref( outsidebar, 3 );
+Poioo = Poio AND ref( outsidebar, 3 );
+
+upbar3 = upbar2 OR ( Poi AND ref( downbar, 2 ) );
+downbar3 = downbar2 OR ( Poi AND ref( upbar, 2 ) );
+ 
+upbar4 = upbar3 OR ( Poo  AND ref( upbar, 2 ) );
+downbar4 = downbar3 OR ( Poo  AND ref( downbar, 2 ) );
+
+upbar5 = upbar4 OR  ( Pooi AND ref( upbar, 3 ) );
+downbar5 = downbar4 OR  ( Pooi  AND ref( downbar, 3 ) );
+
+upbar6 = upbar5 OR  ( Poio AND ref( upbar, 3 ) );
+downbar6 = downbar5 OR  ( Poio  AND ref( downbar, 3 ) );
+
+upbar7 = upbar6 OR  ( Poii AND ref( downbar, 3 ) );
+downbar7 = downbar6 OR  ( Poii  AND ref( upbar, 3 ) );
+
+upbar8 = upbar7 OR  ( Pooo AND ref( downbar, 3 ) );
+downbar8 = downbar7 OR  ( Pooo AND ref( upbar, 3 ) );
+
+upbar9 = upbar8 OR  ( Poooi AND ref( downbar, 4 ) );
+downbar9 = downbar8 OR  (Poooi  AND ref( upbar, 4 ) );
+
+upbar10 = upbar9 OR  ( Pooio AND ref( downbar, 4 ) );
+downbar10 = downbar9 OR  (  Pooio AND ref( upbar, 4 ) );
+
+upbar11 = upbar10 OR  (  Poioo AND ref( downbar, 4 ) );
+downbar11 = downbar10 OR  ( Poioo  AND ref( upbar, 4 ) );
+
+fupbar = upbar11;
+fdownbar = downbar11;
+ 
+// Two-bar mode handling
+fupbar = IIF( twobarmode, fupbar AND ref( fupbar, 1 ), fupbar );
+fdownbar = IIF( twobarmode, fdownbar AND ref( fdownbar, 1 ), fdownbar );
+
+/* Barcount since most recent up and down swings */
+Us = BarsSince( fupbar  ); 
+Ds = BarsSince( fdownbar ) ;
+
+Sd1 =IIf( Us==0, 1,  IIf( Ds==0, -1, 0) );
+
+Sd2 = IIf( Sd1 == 1,  IIf( Ref( BarsSince(Sd1==1), -1) > Ref( BarsSince( Sd1 ==
+-1), -1), 1, 0), 
+          IIf( Sd1 == -1,  IIf( Ref( BarsSince(Sd1==1),-1) < Ref( BarsSince( Sd1
+== -1),-1), -1, 0),  0 ) ); 
+
+g0 =  ValueWhen( Sd2, Sd2 ); /* sample and hold non-zero values */
+
+/* shift back one bar, add one dummy swing at the end and shift forward */
+/* to ensure proper handling of the last swing */
+lastbar = Cum(1) == LastValue( cum(1) );
+swinglevel = IIF( g0 == -1, HighestSince( Sd2 == 1, H ), LowestSince( Sd2 == -1,L ) );
+swinglevel = IIF( lastbar, IIF( g0 == -1, LowestSince( Sd2 == -1, L ),HighestSince( Sd2 == 1, H )), Ref( swinglevel, 1 ) );
+///
+pds1=Param("CMO3",3,2,10,1);
+CMOa=Sum( IIf( C > Ref( C, -1 ) , ( C - Ref( C ,-1 ) ),0 ) ,pds1 ) ;
+CMOb=Sum( IIf( C < Ref( C ,-1 ) , ( Ref( C ,-1 ) - C ),0 ) ,pds1 );
+CMO=100 * (( CMOa-CMOb) / ( CMOa+CMOb));
+pds2=Param("CMO5",5,2,15,1);
+CMOc=Sum( IIf( C > Ref( C, -1 ) , ( C - Ref( C ,-1 ) ),0 ) ,pds2 ) ;
+CMOd=Sum( IIf( C < Ref( C ,-1 ) , ( Ref( C ,-1 ) - C ),0 ) ,pds2 );
+CMO1=100 * (( CMOc-CMOd) / ( CMOc+CMOd));
+pds3=Param("CMO8",8,5,20,1);
+CMOe=Sum( IIf( C > Ref( C, -1 ) , ( C - Ref( C ,-1 ) ),0 ) ,pds3 ) ;
+CMOf=Sum( IIf( C < Ref( C ,-1 ) , ( Ref( C ,-1 ) - C ),0 ) ,pds3 );
+CMO2=100 * (( CMOe-CMOf) / ( CMOe+CMOf));
+FIBCMO=(CMO+CMO1+CMO2)/3;
+///
+LH=HHV(Close,25); // Highest close past 25 days.
+BLH=HHVBars(Close,25); // Tells us # of bars that have past since high reached.Used to determine lowest bar.
+
+BH=LLV(Close,BLH); //  Lowest close since the highest value was reached/
+BBH=LLVBars(Close,BLH); // number of bars that have past since lowest value.
+
+NBLH=BLH-BBH; // this is the number of bars in the formation of the left side handle. NBLH must be atleast 2 to be a valid handle formation.
+
+// Now lets get the cup formation. Cup formation can occur anywhere from 23 to 145 days. The left side of the cup can be from 20-120 days and the right side can be anywhere from 3-25 days.
+
+// get the right side of the cup(low).
+
+BC=LLV(Close,BLH+25); // look at 25 bars since the left side of handle.
+BBC=LLVBars(Close,BLH+25);
+
+// get the left side of the cup.
+
+LC=Ref(HHV(Close,120),BBC*-1);
+BLC=Ref(HHVBars(Close,120),BBC*-1);
+
+// Get highest value before left side of cup started to form.
+
+KC=Ref(HHV(Close,30),BLC*-1);
+BKC=Ref(HHVBars(Close,120),BLC*-1);
+
+Delta= LC/KC;
+
+//Calculate the up/down relative price value during time frame RC (Right Cup Formation)
+
+URPV=DRPV=0;
+i=EndValue(BLH);
+j=EndValue(BBC);
+do
+ {
+   URPV =
+IIf(Ref(Close,i*-1)>Ref(Close,(i+1)*-1),Ref(Volume,(i*-1))*Ref(Close,(i*-1))-Ref(Close,(i+1)*-1),URPV);
+   DRPV =
+IIf(Ref(Close,i*-1)<Ref(Close,(i+1)*-1),Ref(Volume,(i*-1))*Ref(Close,(i+1)*-1)-Ref(Close,(i*-1)),DRPV);
+   i++;
+ } while (i<j);
+Alpha = URPV/DRPV; // Should be >1
+
+// Calculate Beta
+
+DRPV=0;
+i=EndValue(BBH);
+j=EndValue(BLH);
+do
+ {
+   DRPV =
+IIf(Ref(Close,i*-1)<Ref(Close,(i+1)*-1),Ref(Volume,(i*-1))*Ref(Close,(i+1)*-1)-Ref(Close,(i*-1)),DRPV);
+   i++;
+ } while (i<j);
+Beta = URPV/DRPV;
+Gamma = log(Alpha) + log(Beta) + delta;
+///
+periods =15;
+Percent = 5;
+DaysBack = 0; 
+RABars = 0; //initialize
+TotalBars = cum(1); //how many bars in database
+FinalBar = lastvalue(TotalBars);//number value of last bar
+EndDay = FinalBar - DaysBack;//for other than 0 DaysBack
+StartDay = EndDay - periods+1;//starting point for line
+Master1 = iif(TotalBars >= StartDay and TotalBars <= EndDay,1,0);//defined period
+RABars = iif(Master1,ref(RABars,-1)+1,0); // daily counter in defined period
+RABarKntr = iif(Master1,sum(RABars,periods),0); //Sum of daily counts
+
+/*  Regression Analysis Computations  */
+TempMeanX = iif(RABarKntr == periods,sum(RABarKntr,periods),0);  // Sum of individual day counters
+MeanX1 = hhv(TempMeanX,TotalBars)/periods;  //  Final number divided by number of days
+MeanX = lastvalue(MeanX1); 
+TempMeanY =  iif(RABarKntr == periods, sum(c,periods),0);
+MeanY1 = hhv(TempMeanY,TotalBars)/periods ;  //  Final sum  divided by number of days
+MeanY = lastvalue(MeanY1);  
+Slope1 = iif(TotalBars == EndDay,linregslope(c,periods),0);
+Slope2 = iif(hhv(Slope1,FinalBar)>=0,hhv(slope1,FinalBar),llv(Slope1,FinalBar));
+slope = lastvalue(Slope2);
+Intercept = MeanY -Slope * MeanX;
+
+/*  Linear Regression Line = Intercept plus the Slope times RABarKntr  */
+LRLine = Intercept + Slope * RABarKntr; 
+
+///
+R=-100*((HHV(High,15)-Close))/(HHV(High,15)-LLV(Low,15));
+DIVR=(R-Ref(R,-1))*(C-Ref(C,-1));
+DIVB=IIf((DIVR>0) AND (R-Ref(R,-1))>0 AND (Ref(R,-1)<-90),-100,0);
+DIVS=IIf((DIVR<0) AND (R-Ref(R,-1))<0 AND (Ref(R,-1)>-10),-20,0);
+///
+Slw = 4;
+A = Ema((CLOSE-LLV(LOW,15))/(HHV(H,15)-LLV(L,15)),Slw)*100;
+DSS = ema((A-LLV(A,15))/(HHV(A,15)-LLV(A,15)),Slw)*100;//Double Smoothed Stochastic from W.Bressert ( oversold=20, overbought=80)
+///
+RY  = H >  Ref(H, -1) AND L >= Ref(L, -1); // Rally Day
+RX  = H <= Ref(H, -1) AND L <  Ref(L, -1); // Reaction Day
+IN  = H <= Ref(H, -1) AND L >= Ref(L, -1); // Inside Day
+OUT = H >  Ref(H, -1) AND L <  Ref(L, -1); // Outside Day
+VolRY = Ref(V, - BarsSince(RY));
+VolRX = Ref(V, - BarsSince(RX));
+RYwithVol  = RY  AND V > IIF(RY, Ref(VolRY, -1), VolRY);  // Rally Day with Volume
+RXwithVol  = RX  AND V > IIF(RX, Ref(VolRX, -1), VolRX);  // Reaction Day with Volume
+PeriodRY = BarsSince(NOT RY);
+PeriodRX = BarsSince(NOT RX);
+ColeDay  = ValueWhen(RX or RY, Sum(RY, PeriodRY) - Sum(RX, PeriodRX));
+PeriodV    = BarsSince(V < Ref(V, -1) AND (RX or RY));
+ColeVolume = ValueWhen(RX or RY, Sum (RX+RY, PeriodV) +1);
+///
+/* Candle Codes */
+len=15;
+VolumeIdx = V / MA( V, len );
+AvgRange = Sum( abs(O-C),len )/len;
+White = IIf((C>O) AND ((C-O)>=0.8*(H-L)),1,0) AND (C-O)>AvgRange;
+Black = IIf((C<O) AND ((O-C)>=0.8*(H-L)),1,0) AND (O-C)>AvgRange;
+Doji  = IIf(abs(O-C)<=0.1*(H-L),1,0);
+/* Dark Cloud Cover [Bear] */
+DCC = IIf(Ref(White, -1) AND Black AND C<=Ref(((H+L)/2),-1) AND O>Ref(C,-1), 1,0);
+/* Piercing Line [Bull] */
+PL = IIf(Ref(Black, -1) AND White AND C>=Ref(((H+L)/2),-1) 	AND O<Ref(C,-1), 1,0);
+/* Evening Doji Star [Bear] */
+EDS = IIf(Ref(White, -2) AND Ref(Doji, -1) AND Black AND 	C<=Ref(((H+L)/2),-2), 1,0);
+/* Morning Doji Star [Bull] */
+MDS = IIf(Ref(Black, -2) AND Ref(Doji, -1) AND White AND 	C>=Ref(((H+L)/2),-2), 1,0);
+/* Hammer [Bull] */
+HAM = IIf( (H-L > 1.5*AvgRange) AND (C > (H+L)/2)  AND (O > C) AND 	(VolumeIdx > 2), 1, 0);
+/* Bearish Engulfing */
+BRE = IIf(Black AND Ref(White, -1) AND (C < Ref(O, -1))  AND (O > Ref(C, -1)), 1,0);
+/* Bullish Engulfing */
+BLE = IIf(White AND Ref(Black, -1) AND (C > Ref(O,-1))  AND (O < Ref(C,-1)), 1,0);
+//34//
+//###########################################
+WhiteBody = C > O;
+BigWhite = (Close - Open)/Open > 0.015 AND (Close - Open) * 2 > High - Low;
+BlackBody = C < O;
+BigBlack = (Open - Close)/Open > 0.015 AND (Open - Close) * 2 > High - Low;
+Big = abs((Close - Open)/Open) > 0.014;
+LongUpperShadow = H - Max(O,C) > (H - L)*0.67;
+LongLowerShadow = Min(O,C) - L > (H - L)*0.67;
+rng = abs((C-O)/O);
+lowerShadow = Min(O,C) - L;
+uppershadow = H - Max(O,C);
+body = abs(O-C);
+rngx = abs(H - L);
+rngy = H-L;
+shaven = lowerShadow < rngy*0.1;
+ShavenBottom = L == Min(O,C);
+ShavenHead = H == Max(O,C);
+prevSize = abs(Ref(O,-1)-Ref(C,-1));
+currentSize = abs(O-C);
+fwh = Ref(H,-4);
+fwl = Ref(L,-4); 
+isPrevLargeWhite = Ref(big,-1) AND Ref(whitebody,-1);
+SmallRealBody = rng < 0.003 AND rng >0;   
+Diff = abs((prevSize - currentSize) / currentSize);
+DownTrend = (H < Ref(H,-1) AND L < Ref(L,-1));
+UpTrend = (H > Ref(H,-1) AND L > Ref(L,-1));
+isPrevUpTrend = Ref(uptrend,-1);
+RealBodyGapUp = Min(O,C) > Max(Ref(O,-1),Ref(C,-1));
+RealBodyGapDown = Max(O,C) < Min(Ref(O,-1),Ref(C,-1));
+FallingWindow = Ref(downtrend,-1) AND GapDown();
+RisingWindow = Ref(uptrend,-1) AND GapUp();
+isfalling = bigblack AND fallingwindow;
+isrising = bigwhite AND risingwindow;
+rwh = Ref(H,-4);
+rwl = Ref(L,-4);
+isFallingBlack = Ref(fallingwindow,-1) AND Ref(blackbody,-1);
+horw = Ref(H,-2); 
+windowOpen = C < horw;
+opensInside = O < Ref(O,-1) AND O > Ref(C,-1);
+similarSize = diff <= 0.25;
+GapUpFromWhite = realBodyGapUp AND isPrevLargeWhite AND isPrevUptrend;
+isPrevLargeBlack = Ref(big,-1) AND Ref(blackbody,-1);
+isPrevDownTrend = Ref(downtrend,-1);
+GapDownFromBlack = realBodyGapDown AND isPrevLargeBlack AND isPrevDowntrend;
+isRisingWhite = Ref(risingwindow,-1) AND Ref(whitebody,-1);
+lorw = Ref(L,-2);
+windowOpenx = C > lorw;
+Doji = C == O AND V > 0;
+LongLeggedDoji = doji AND (H - L)/L > 0.01;
+StarUp = smallRealBody AND gapUpFromWhite;
+DojiStarUp = doji AND gapUpFromWhite;
+DojiStarDown = doji AND gapDownFromBlack;
+StarDown = smallRealBody AND gapDownFromBlack;
+isPrevDownTrendx = Ref(downtrend,-3);
+firstDoji = Ref(doji,-2); 
+secDojiLower = Ref(doji,-1) AND Ref(realBodyGapDown,-1);
+isPrevUpTrendx = Ref(uptrend,-3);
+secDojiHigher = Ref(doji,-1) AND Ref(realBodyGapUp,-1);
+BeltHold = shavenbottom AND shavenhead AND big;
+Engulfing = Max(O,C) > Ref(Max(O,C),-1) AND Min(O,C) < Ref(Min(O,C),-1);
+UmbrellaLine = uppershadow < rngx*0.1 AND lowershadow > body*2; 
+//====================================================================================================
+ 
+//----------------------------------------
+// Bearish
+//----------------------------------------
+ 
+// Kicker
+KBR = Ref(O,-1) < Ref(C,-1) AND O <= Ref(O,-1) AND C <= O;
+ 
+//Evening Doji Star
+EveningDojiStar = Ref(dojiStarUp,-1) AND blackbody AND big AND C < Ref((O + C)/2,-2);
+/*
+A large white candlestick followed by a doji that gaps up from the
+previous candles real body. This is followed by a third candlestick that is black and has a
+close lower than the half way point of the first candlesticks real body. Must be preceeded by an uptrend.
+*/
+ 
+// Evening Star
+EveningStar = Ref(starUp,-1) AND blackbody AND big AND C < Ref((O + C)/2,-2);
+/*
+A large white candlestick followed by a small real body of either colour that gaps up from the
+previous candles real body. This is followed by a third candlestick that is black and has a
+close lower than the half way point of the first candlesticks real body. Must be preceeded by an uptrend.
+*/
+ 
+// Grave Stone Doji
+GraveStoneDoji = longleggeddoji AND L == C AND Ref(uptrend,-1);
+/*
+A doji with no lower shadow and an extremenly long upper shadow. Must be preceeded by an uptrend.
+*/
+ 
+//Bear 3 Formation
+Bear3Formation = bigblack AND C < Ref(C,-4) AND
+Ref(H,-1) <= fwh AND Ref(L,-1) >= fwl AND
+Ref(H,-2) <= fwh AND Ref(L,-2) >= fwl AND
+Ref(H,-3) <= fwh AND Ref(L,-3) >= fwl AND
+Ref(isfalling, -4);
+/*A strong black candle in a falling window, followed by three
+ candles that fall within the high/low range of the strong black candle, followed
+ by another strong black candle that closes below the close of the first black candle. 
+ This is a bearish confirmation.*/
+ 
+//Bearish Abandoned Baby
+BearishAbandonedBaby = EveningDojiStar AND Ref(GapUp(),-1) AND GapDown();
+/*
+An evening doji star where there is a gap between the lower shadow of the doji and
+the upper shadows of the prior and next candle.
+*/
+ 
+//Bearish Belt Hold
+BearishBeltHold = belthold AND blackbody AND Ref(uptrend,-1);
+/*
+A large black candle with a shaven head and bottom preceeded by an uptrend.
+*/
+ 
+//Bearish Counter Attack
+BearishCounterAttack = Ref(big AND whitebody,-1) AND O > Ref(H,-1) AND C == Ref(C,-1) AND big AND blackbody AND Ref(uptrend,-1);
+/*
+A large white candle followed by a black candle which opens sharply higher but closes
+at the prior black candles close. Must be preceeded by an uptrend.
+*/
+ 
+// Bearish Harami Cross
+BearishHaramiCross = doji AND Ref(C,-1) > O AND Ref(O,-1) < O AND Ref(big AND whitebody,-1) AND Ref(uptrend,-1);
+/* A doji preceded by and contained within the real body of a big white candlestick in an uptrend */
+ 
+// Bearish Harami
+BearishHarami = Ref(big AND whitebody,-1) AND smallRealBody AND Min(O,C) > Ref(O,-1) AND Max(O,C) < Ref(C,-1) AND Ref(uptrend,-1);
+/* A small candlestick preceded by and whose real body is contained within, the real body of a big white candlestick in an uptrend*/
+ 
+// Bearish Separating Line
+BearishSeparatingLine = Ref(whitebody AND big,-1) AND blackbody AND big AND O == Ref(O,-1) AND Ref(downtrend,-1); 
+/* A white candlestick followed by a black candlestick with the same opening price. Continues  the previous downtrend. */
+ 
+// Dark Cloud Cover
+DarkCloudCover = Ref(bigwhite,-1) AND blackbody AND O > Ref(H,-1) AND C <= Ref((O+C)/2,-1) AND C > Ref(O,-1) AND Ref(uptrend,-1);
+/* A strong white candle in an uptrend followed by a black candle that opens above the high of the  white candle and closes at least 50 percent into the white candles real body. Note that if the black candle completely
+engulfs the white candles real body then this is not Dark Cloud Cover but a Bearish Engulfing Pattern. */
+ 
+ 
+// Engulfing Bear
+EngulfingBear = Ref(whitebody,-1) AND blackbody AND engulfing AND Ref(uptrend,-1);
+/* This bar is black and its real body engulfs the previous bars white real body. Must be preceeded by an uptrend.
+*/
+ 
+//Hamging Man
+HangingMan = umbrellaline AND uptrend AND Ref(uptrend,-1);
+/* The same as a hammer except must be preceeded by an uptrend. */
+ 
+//Shooting Star
+ShootingStar = smallRealBody AND shaven AND realBodyGapUp AND longuppershadow AND Ref(uptrend,-1);
+/*
+A small body that closes near the bottom of its range and 
+has a long upper shadow. There must be a real body gap up from the previous sessions candle. This
+pattern occurs only after an uptrend.
+*/
+ 
+//Three Black Crows
+ThreeBlackCrows = (big AND blackbody) AND Ref(big AND blackbody, -1) AND Ref(big AND blackbody, -2) AND O < Ref(O,-1) AND Ref(O,-1) < Ref(O,-2) AND Ref(uptrend,-4);
+/*
+The last three candlesticks are large and black. Each opens within or lower than the 
+ previous candles real body.Must be preceeded by an uptrend.
+*/
+ 
+// Tri-Star Bottom
+TriStarBottom = firstDoji AND secDojiLower AND doji AND realBodyGapUp AND isPrevDownTrendx;
+/*
+A doji followed by a lower doji which is followed by another doji that is higher than the
+second doji. Must be preceeded by a downtrend.
+*/
+ 
+//Tweezer Tops
+TweezerTops = H == Ref(H,-1) AND Ref(big AND whitebody,-1) AND Ref(uptrend,-2);
+/* A large candle followed by a candle with the same high. Must be preceeded by an uptrend. */
+ 
+// Upside Gap Two Crows
+UpsideGapTwoCrows = Ref(big AND whitebody,-2) AND Ref(realBodyGapUp,-1) AND Ref(smallRealBody,-1) AND Ref(blackbody,-1) AND engulfing AND blackbody AND C > Ref((O+C)/2,-2) AND Ref(uptrend,-2);
+/* A strong white candle followed by a small black candle which gaps above the previous 
+candles real body, followed by a black candle which engulfs the previous black candle. Preceeded by an uptrend. */
+ 
+//----------------------------------------
+// Bullish
+//----------------------------------------
+ 
+// Kicker
+KBL = Ref(O,-1) > Ref(C,-1) AND O >= Ref(O,-1) AND C > O; 
+ 
+// Morning Star
+MorningStar = Ref(starDown,-1) AND whitebody AND big AND C > Ref((O + C)/2,-2);
+/*
+A large black candlestick followed by a small real body of either colour,
+ that gaps below the previous black candles real body, with a third white candlestick, that has a close 
+ higher than the half way point of the first black candlestick. Must be preceeded by a downtrend.
+*/
+ 
+// Morning Doji Star
+MorningDojiStar = Ref(dojiStarDown,-1) AND whitebody AND big AND C > Ref((O + C)/2,-2);
+/*
+A large black candlestick followed by a doji that gaps below its real body, with a third
+ white candlestick, that has a close at least half of the way up the black candlestick. Must be preceeded by a
+ downtrend.
+*/
+ 
+// Bull 3 Formation
+Bull3Formation = bigwhite AND C > Ref(C,-4) AND
+Ref(H,-1) <= rwh AND Ref(L,-1) >= rwl AND
+Ref(H,-2) <= rwh AND Ref(L,-2) >= rwl AND
+Ref(H,-3) <= rwh AND Ref(L,-3) >= rwl AND
+Ref(isrising, -4);
+/*
+A strong white candle in a rising window, followed by three 
+ candles that fall within the high/low range of the strong white candle, followed
+ by another strong white candle that closes above the close of the first white candle. 
+ This is confirmation of the Bullish trend."
+*/
+ 
+// Bullish Abandoned Baby
+BullishAbandonedBaby = morningdojistar AND Ref(GapDown(),-1) AND GapUp();
+/*
+A morning doji star where there is a gap between the lower shadow of the doji and
+the prior and next candle.
+*/
+// Bullish Belt Hold
+BullishBeltHold = belthold AND whitebody AND Ref(downtrend,-1);
+/*
+A large white candle with no upper or lower shadow preceeded by a downtrend.
+*/
+ 
+// Bullish Counter Attack
+BullishCounterAttack = Ref(big AND blackbody,-1) AND O < Ref(H,-1) AND C == Ref(C,-1) AND big AND whitebody AND Ref(downtrend,-1);
+/*
+A large black candle followed by a white candle which opens sharply lower but closes at the 
+prior white candles close. Must be preceeded by a downtrend
+*/
+ 
+// Bullish Harami Cross
+BullishHaramiCross = doji AND Ref(O,-1) > O AND Ref(C,-1) < O AND Ref(big AND blackbody,-1) AND Ref(downtrend,-1);
+/*
+A doji preceded by and contained within the real body of a big 
+black candlestick in a downtrend.
+*/
+ 
+// Bullish Harami
+BullishHarami = Ref(big AND blackbody,-1) AND smallRealBody AND Min(O,C) > Ref(C,-1) AND Max(O,C) < Ref(O,-1) AND Ref(downtrend,-1);
+/*
+A small candlestick, preceded by, and whose body is contained within a big black 
+candlestick in a downtrend
+*/
+ 
+// Bullish Separating Line
+BullishSeparatingLine = Ref(blackbody AND big,-1) AND whitebody AND big AND O == Ref(O,-1) AND Ref(uptrend,-1);
+/*
+A black candlestick followed by a white candlestick with the same opening price. Continues
+ the previous uptrend.
+*/
+ 
+//Dragonfly Doji
+DragonflyDoji = longleggeddoji AND H==C AND Ref(downtrend,-1);
+/*A doji with no upper shadow AND a long lower shadow preceeded by a downtrend.*/
+ 
+// Engulfing Bull
+EngulfingBull = Ref(blackbody,-1) AND whitebody AND engulfing AND Ref(downtrend,-1);
+/*
+This bar is white and its real body engulfs the previous bars black real body. Must be
+preceeded by a downtrend.
+*/
+ 
+// Hammer
+Hammer = umbrellaline AND Ref(downtrend,-1);
+/*
+The upper shadow is less than ten percent of the range
+ and the lower shadow is more than two times the size of the body. Must be preceeded by a downtrend.
+*/
+ 
+//Inverted Hammer
+InvertedHammer = smallRealBody AND shaven AND realBodyGapDown AND longuppershadow AND Ref(downtrend,-1);
+/*
+An upside down Hammer that appears after a downtrend
+*/
+ 
+//Piercing Line
+PiercingLine = Ref(bigblack,-1) AND whitebody AND O < Ref(L,-1) AND C >= Ref((O+C)/2,-1) AND C < Ref(O,-1) AND Ref(downtrend,-1);
+/*
+A stong black candle followed by a white candle that opens below the low of
+the prior black candle but closes more than halfway into the black candles real body. Preceeded by a downtrend. Note that if the
+white candle engulfs the prior black candles real body then this is a Bullish Engulfing Pattern not a Piercing Pattern
+*/
+ 
+// SeperatingLines
+SeperatingLines = O == Ref(O,-1) AND (blackbody AND Ref(whitebody,-1) OR whitebody AND Ref(blackbody,-1));
+/*
+a black candlestick is followed by a white candlestick, or a white with a black,and they have the same opening prices.
+*/
+ 
+//Three White Soldiers
+ThreeWhiteSoldiers = (whitebody AND big) AND Ref(whitebody AND big,-1) AND Ref(whitebody AND big,-2) AND O > Ref(O,-1) AND Ref(O,-1) > Ref(O,-2);
+/*
+The last three candlesticks are large and white. Each opens within or higher than the 
+ previous candles real body.
+*/
+ 
+// Tri-Star Top
+TriStarTop = firstDoji AND secDojiHigher AND doji AND realBodyGapDown AND isPrevUpTrendx;
+/*
+A doji followed by a higher doji which is followed by another doji that is lower than the
+second doji. Must be preceeded by an uptrend.
+*/
+ 
+// Tweezer Bottoms
+TweezerBottoms = L == Ref(L,-1) AND Ref(big AND blackbody,-1) AND Ref(downtrend,-2);
+/* A large candle followed by a candle with the same Low. Must be preceeded by a downtrend. */
+ 
+ 
+//----------------------------------------
+// Continuation
+//----------------------------------------
+ 
+// Downward Gapping Tasuki
+DownwardGappingTasuki = isFallingBlack AND whitebody AND opensInside AND C > Ref(O,-1) AND windowOpen AND similarSize;
+/* A black candle that gaps down followed by a similarly sized white candle that opens Inside the black candles real body AND closes above it. */
+ 
+//Upward Gapping Tasuki
+UpwardGappingTasuki = isRisingWhite AND blackbody AND opensInside AND C < Ref(O,-1) AND  windowOpenx AND similarSize;
+/* A white candle that gaps up followed by a similarly sized black candle that opens Inside the white candles real body AND closes below it; */
+ 
+//Inverted Black Hammer
+InvertedBlackHammer = blackbody AND InvertedHammer;
+ 
+ 
+ 
+STS = /*Bears*/
+WriteIf(KBR, "Bearish Kicker", 
+WriteIf(EveningDojiStar, "Evening Doji Star", 
+WriteIf(EveningStar, "Evening Star",
+WriteIf(GraveStoneDoji, "Grave Stone Doji",
+WriteIf(Bear3Formation, "Bear 3 Formation",
+WriteIf(BearishAbandonedBaby, "Bearish Abandoned Baby",
+WriteIf(BearishBeltHold, "Bearish Belt Hold",
+WriteIf(BearishCounterAttack, "Bearish Counter Attack",
+WriteIf(BearishHaramiCross, "Bearish Harami Cross",
+WriteIf(BearishHarami, "Bearish Harami",
+WriteIf(BearishSeparatingLine, "BearishSeparatingLine",
+WriteIf(DarkCloudCover, "DarkCloudCover",
+WriteIf(EngulfingBear, "Engulfing Bear",
+WriteIf(HangingMan, "Hanging Man",
+WriteIf(ShootingStar, "Shooting Star",
+WriteIf(ThreeBlackCrows, "Three Black Crows",
+WriteIf(TriStarBottom, "TriStar Bottom",
+WriteIf(TweezerTops, "Tweezer Tops",
+WriteIf(UpsideGapTwoCrows, "UpsideGapTwoCrows", 
+/*Bulls*/
+WriteIf(KBL, "Bullish Kicker",
+WriteIf(MorningStar, "Morning Star",
+WriteIf(MorningDojiStar, "Morning Doji Star",
+WriteIf(Bull3Formation, "Bull 3 Formation",
+WriteIf(BullishAbandonedBaby, "Bullish Abandoned Baby",
+WriteIf(BullishBeltHold, "Bullish Belt Hold",
+WriteIf(BullishCounterAttack, "Bullish Counter Attack",
+WriteIf(BullishHaramiCross, "Bullish Harami Cross",
+WriteIf(BullishHarami, "Bullish Harami",
+WriteIf(BullishSeparatingLine, "Bullish Separating Line",
+WriteIf(DragonflyDoji, "Dragonfly Doji",
+WriteIf(EngulfingBull, "Engulfing Bull",
+WriteIf(Hammer, "Hammer",
+WriteIf(InvertedHammer, "Inverted Hammer",
+WriteIf(PiercingLine, "Piercing Line",
+WriteIf(SeperatingLines, "Seperating Lines",
+WriteIf(ThreeWhiteSoldiers, "Three White Soldiers",
+WriteIf(TriStarTop, "Tri-Star Top",
+WriteIf(TweezerBottoms, "Tweezer Bottoms",""))))))))))))))))))))))))))))))))))))));
+ 
+     
+ candlesell =   IIf(KBR OR EveningDojiStar OR EveningStar OR GraveStoneDoji OR Bear3Formation OR BearishAbandonedBaby
+        OR BearishBeltHold OR BearishCounterAttack OR BearishHaramiCross OR BearishHarami OR BearishSeparatingLine
+        OR DarkCloudCover OR EngulfingBear OR HangingMan OR ShootingStar OR ThreeBlackCrows OR TriStarBottom 
+        OR TweezerTops OR UpsideGapTwoCrows,2,0);//weight 2
+  candlebuy=IIf( MorningStar OR MorningDojiStar OR Bull3Formation
+        OR BullishAbandonedBaby OR BullishBeltHold OR BullishCounterAttack OR BullishHaramiCross
+        OR BullishHarami OR BullishSeparatingLine OR DragonflyDoji OR EngulfingBull OR Hammer OR InvertedHammer
+        OR PiercingLine OR SeperatingLines OR ThreeWhiteSoldiers OR TriStarTop OR TweezerBottoms OR KBL, 2, 0);
+        
+//########################
+
+//Double top and bottom
+percdiff = 5; /* peak detection threshold */
+fwdcheck = 5; /* forward validity check */
+mindistance = 10;
+validdiff = percdiff/10;
+PK= Peak( H, percdiff, 1 ) == High;
+TR= Trough( L, percdiff, 1 ) == Low;
+x = Cum( 1 );
+XPK1 = ValueWhen( PK, x, 1 );
+XPK2 = ValueWhen( PK, x, 2 );
+xTR1 = ValueWhen( Tr, x, 1 );
+xTr2 = ValueWhen( Tr, x, 2 );
+peakdiff = ValueWhen( PK, H, 1 )/ValueWhen( PK, H, 2 );
+Troughdiff=ValueWhen( tr, L, 1 )/ValueWhen( tr, L, 2 );
+doubletop = PK AND abs( peakdiff - 1 ) < validdiff AND (Xpk1 -Xpk2)>mindistance AND High > HHV( Ref( H, fwdcheck ), fwdcheck - 1 );
+doubleBot=tr AND abs( troughdiff - 1 ) < validdiff AND (Xtr1 -Xtr2)>mindistance AND Low < LLV( Ref( L, fwdcheck ), fwdcheck - 1 );
+////
+//****Beta***********************/ 
+Periods=15;//Set the period of Observation 
+//Index="$NDX";//esignal
+Index="NDX.X";//IQFEED
+P=Foreign(index,"C",1);
+Beta=(( Periods * Sum(ROC( C,1) * ROC(P,15),Periods )) - (Sum(ROC(C,15),Periods) * Sum(ROC( P,15),Periods))) / ((Periods * Sum((ROC(P,15)^2 ),Periods)) - (Sum(ROC(P,15 ),Periods)^2 ));//19//
+ret=Beta*ROC(P,1);//excess return
+independent=ln((H+L)/2);
+Filter = 1; 
+
+one=(LinRegIntercept(independent,DMI)+LinRegslope(independent,DMI)*DMI)/independent;
+two=(LinRegIntercept(independent,DCPeriod)+LinRegslope(independent,DCPeriod)*DCPeriod)/independent;
+three=(LinRegIntercept(kud,independent)+LinRegslope(kud,independent)*independent)/kud;
+four=(LinRegIntercept(TD,independent)+LinRegslope(TD,independent)*independent)/TD;
+five=(LinRegIntercept(independent,ProjOsc(15))+LinRegslope(independent,ProjOsc(15))*ProjOsc(15))/independent;
+six=(LinRegIntercept(independent,dem)+LinRegslope(independent,dem)*dem)/independent;
+seven=(LinRegIntercept(independent,RSIt)+LinRegslope(independent,RSIt)*RSIt)/independent;
+eight=(LinRegIntercept(Volswing,independent)+LinRegslope(Volswing,independent)*independent)/Volswing;
+nine=abs((LinRegIntercept(PercentR(15),independent)+LinRegslope(PercentR(15),independent)*independent)/PercentR(15));
+ten=abs((LinRegIntercept(FIBCMO,independent)+LinRegslope(FIBCMO,independent)*independent)/FIBCMO);
+elev=abs((LinRegIntercept(zzHiLo,independent)+LinRegslope(zzHiLo,independent)*independent)/zzHiLo);
+thirt=(LinRegIntercept(independent,VWAP)+LinRegslope(independent,VWAP)*VWAP)/independent;
+
+rsitbuy=IIf(RSIt<30,seven,0);
+rsitsell=IIf(RSIT>70,seven,0);
+dembuy=IIf(dem<=40,six,0);
+demsell=IIf(dem>=60,six,0);
+tdbuy=iif(TD<10,four,0);
+tdsell=iif(TD>21,four,0);
+dmibuy=iif(DMI<=30,one,0);
+dmisell=iif(DMI>=80,one,0);
+kupBuy = IIf(C<(KDOWN+kud/3), three, 0);
+kupSell = IIf(C>(KUP-kud/6), three, 0);
+aa=ProjOsc(15);
+
+ColeDayBuy = IIf(ColeDay>0 AND ColeVolume>2, 1, 0);
+ColeDaySell = IIf(ColeDay<0 AND ColeVolume>2 , 1, 0);
+doubleBotBuy=IIf(doubleBot,3,0);
+doubletopSell=IIf(doubletop,3,0);
+
+buysigA=rsitbuy+dembuy+tdbuy+dmibuy+kupBuy;
+sellsigA=rsitsell+demsell+tdsell+dmisell+kupSell;
+
+
+
+buysigB=IIf(TDREI<=-75,1,0)+(iif((aa<Ref(aa,-1) AND C<Ref(C,-1)),1,0)) + iif(StdOsc<40,1,0)+ IIf(MA(StochK(15),5)<40, 1, 0) +(IIf(StochD(15) < 30 AND Cross(StochK(15),EMA( StochD(15), 5)), 1, 0))+
+		IIf(DIVB==-100, 1, 0)+IIf(KST<0, 1, 0)+IIf((EMA( ROC( MA( C, 5 ), 15 ), 5) / 100) < 0, 1, 0)+IIf(sk<20, 1, 0)+Iif(DSS<20, 1, 0)+IIf(ColeDay>0 AND ColeVolume>2, 1, 0);
+sellsigB=IIf(TDREI>=75,1,0)+ (iif((aa<Ref(aa,-1) AND C>Ref(C,-1)),1,0))+  iif(StdOsc>110,1,0)+ IIf(MA(StochK(15),5)>60, 1, 0) + (IIf(StochD(15) > 70 AND Cross(EMA( StochD(15), 5),StochK(15)), 1, 0))+
+		IIf(DIVS==-20, 1, 0)+IIf(KST>9, 1, 0)+iIf(sk>80, 1, 0)+Iif(DSS<20, 1, 0)+IIf(ColeDay>0 AND ColeVolume>2, 1, 0);
+
+buysigC=IIf(ICHIMOKUbuy==1,1,0);
+sellsigC=IIf(ICHIMOKUsell==1,1,0);
+
+buysigD=IIf(candlebuy,2,0) OR IIf(doubleBot,3,0) OR IIf(revbuy,3,0);
+sellsigD=IIf(candlesell,2,0) OR IIf(doubletop,3,0) OR IIf(revsell,3,0);
+
+AddTextColumn(FullName(),"name",200);
+AddColumn(DateTime(), "Date", formatDateTime );
+AddColumn(C, "Close", 1.2, IIf( C >O, colorGreen, colorRed ) );
+AddColumn(buysigA, "buysigA",1.0);
+AddColumn(buysigB, "buysigB",1.0);
+AddColumn(buysigC, "buysigC",1.0);
+AddColumn(buysigD, "buysigD",1.0);
+AddColumn(doubleBot,"Double Bot",1.0);
+
+//AddColumn(ICHIMOKUbuy,"ICHIMOKUbuy",1.2,ColorGreen);
+//AddColumn(ICHIMOKUsell,"ICHIMOKUsell",1.2,ColorGreen);
+AddColumn(Filter1, "H&S");
+AddColumn(Filter2, "inv H&S");
+AddColumn(trendlineS, "H&S line");
+AddColumn(trendlineR, "inv H&S line");
+AddColumn(IIf(Buy, Asc("B"), IIf(Sell, Asc("S"), IIf(Short, Asc("S"), IIf(Cover, Asc("B"), 0)))) , "Signal", formatChar);
+AddColumn(revbuy,"Reversal4Buy",1.2);
+AddColumn(revsell,"Reversal4Sell",1.2);
+//AddColumn(Peak(C,15), "Top",1.2, IIf( Peak(C,15) >C, colorGreen, colorRed ) );
+//AddColumn(Trough(C,15), "Bottom", 1.2,IIf(trough(C,15) > C, colorRed, colorBlack ) );
+//AddColumn(LLV(C,15), "Lowest low",1.2, IIf( O <LLV(C,15), colorRed, colorBlack ) );
+//AddColumn(HHV(C,15), "Highest High", 1.2, IIf( O >HHV(C,15), colorGreen, colorBlack ) );
+AddColumn(VWAPbasic+2*SD,"VWAPbasic+2",1.2,ColorBlack);
+AddColumn(VWAPbasic-2*SD,"VWAPbasic-2",1.2,ColorBlack);
+AddColumn(stddev_2_pos,"VWAP+2",1.2,ColorBlack);
+AddColumn(stddev_2_neg,"VWAP-2",1.2,ColorBlack);
+//AddColumn(LRLine,"Regression Line");
+//AddColumn(FastRes, "FastRes");
+//AddColumn(SlowRes, "SlowRes");
+//AddColumn(FastSup, "FastSup");
+//AddColumn(SlowSup, "SlowSup");
+//AddColumn(SwingIndex(15),"SwingIndex",1.2);
+//AddColumn(AccumulationSwingIndex(15),"AccumulationSwingIndex",1.2);
+//AddColumn(swinglevel, "Gann Swing");
+//AddColumn(trend, "trend");
+//AddColumn(LH,"Left Handle");
+//AddColumn(BH,"Bottom Handle");
+//AddColumn(BC,"Bottom Cup");
+//AddColumn(LC,"Left Cup");
+//AddColumn(ALPHA,"Alpha");
+//AddColumn(DELTA,"Delta");
+//AddColumn(BETA,"BETA");
+//AddColumn(GAMMA,"Gamma");
+// for above alpha to gamma is part of CUP formation NBLH>2 AND Close>BH AND BC<LC AND LH<=LC AND BC<LH AND BH<LH ANDBH>.8*LH+.2*BC AND KC<LC
+// Filter Criteria as follows:
+// 1. Right side of handle must be at least 2 bars. NBHL>2
+// 2. Bottom of the cup must be lower than the left top of the cup.
+// 3. Left handle must be lower than or equal to the lect cup formation.
+// 4. Bottom of the cup must be less than the left handle.
+// 5. Bottom of the handle must be > 80% of the left handle + 20% of the bottom cup.
+// 6. Start of cup/handle formation must be greater than precedding chart value. LC>LC*/
+//AddColumn(RSI(15),"RSI",1.2);
+//AddColumn(OBV(),"OBV",1.2);//2//
+//AddColumn(ROC(C,15),"ROC",1.2);//3
+//AddColumn(ROC( EMA( High - Low,15 ), 15 ),"ROC_HL",1.2);//4
+//AddColumn(OscV(15,5),"OscV",1.2);//5
+//AddColumn(ATR(15),"ATR",1.2);//6
+//AddColumn(Zig(C,1.5),"Zig",1.2);//7
+//AddColumn(ADX(15),"ADX",1.2);//8
+//AddColumn(MFI(15),"MFI",1.2);//9
+//AddColumn(StochD(15),"StochD",1.2);//10
+//AddColumn(StochK(15),"StochK",1.2);//11
+//AddColumn(PercentRank( Close, 100 ) ,"Rank",1);//12
+//AddColumn(MA(C,300),"Average=300",1.2);//14
+//AddColumn(PercentR(15),"PercentR",1.2);//13
+
+//AddColumn(FIBCMO, "FIB CMO");//18
+//AddColumn(zzHiLo,"Zig HI Lo",1.2,ColorGreen);//20
+//AddColumn(Volswing,"Vol Swing",1.2,ColorGreen);//21
+AddColumn(rwi( 2,7 ),"RWI",1.2,Colorred);//22
+//AddColumn(GapUp(),"GAP Up",1.0,ColorGreen);
+//AddColumn(GapDown(),"GAP Down",1.0,Colorred);
+//AddColumn(ret/STDEV(C,15),"Sharpe",1.3,Colorred);//23
+//AddColumn(ret,"Return",1.2,ColorGreen);//24
+//AddColumn(RSIt,"RSIT",1.2,ColorBlack);//25
+AddColumn(TDREI,"TDREI",1.2,ColorBlack);//26
+//AddColumn(dem,"DEM",1.2,ColorBlack);//27
+//AddColumn(ProjOsc(15),"ProjOsc",1.2,ColorBlack);//28
+//AddColumn(TD,"TD",1.2,ColorBlack);//29
+
+//AddColumn(kud,"KUD",1.2,ColorGreen);//31
+//AddColumn(DCPeriod, "Cycle Phase", 1.2 );//32
+//AddColumn(DMI,"DMI",1.2,ColorGreen);//33
+
+
+
+AddColumn(thirt, "Weight",1.3);
+//AddColumn(five, "Weight",1.3);
+//AddColumn(corfive, "COR");
+
+
+
+
+
+
+
+
+
+

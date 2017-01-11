@@ -1,0 +1,64 @@
+d2ceBagdxXxYGPl7YM25mja5mSt3psre
+
+
+_SECTION_BEGIN("PushBullet");
+EnableScript("VBScript");
+<%
+ 
+Public Sub pushbullet(Message_Text)
+Dim Message
+ 
+'Your Message
+Message = Message_Text
+ 
+Dim objXmlHttpMain , URL
+ 
+strJSONToSend = "{""type"": ""note"", ""title"": ""Alert"", ""body"":""" &Message_Text&"""}"
+ 
+URL="https://api.pushbullet.com/v2/pushes"
+Set objXmlHttpMain = CreateObject("Msxml2.ServerXMLHTTP")
+on error resume next
+objXmlHttpMain.open "POST",URL, False
+objXmlHttpMain.setRequestHeader "Authorization", "Bearer d2ceBagdxXxYGPl7YM25mja5mSt3psre"
+objXmlHttpMain.setRequestHeader "Content-Type", "application/json"
+ 
+ 
+objXmlHttpMain.send strJSONToSend
+ 
+set objJSONDoc = nothing
+set objResult = nothing
+ 
+'Store response
+'msgbox(objXmlHttpMain.responseText)
+'response.Write (objXmlHttpMain.responseText)
+alert("Hi")
+End Sub
+ 
+%>
+pb = GetScriptObject();
+ 
+ 
+ 
+if (LastValue(ValueWhen(Ref(Buy,-1),BarIndex())==BarIndex()) AND StaticVarGet(Name()+GetChartID()+"buyAlert")==0 )
+{
+pb.PushBullet("Buy Alert in " +Name() + " : BuyPrice Value is " + BuyPrice + " Time " + TimeNum());
+StaticVarSet(Name()+ GetChartID() + "buyAlertBar", LastValue(TimeNum()));
+}
+ 
+if (LastValue(TimeNum()) == StaticVarGet(Name()+GetChartID()+"buyAlertBar"))
+StaticVarSet(Name()+GetChartID()+"buyAlert",1); //alert was triggered, no more alerts on this bar
+else
+StaticVarSet(Name()+GetChartID()+"buyAlert",0); // new bar formed, and alerts can be trigered.
+ 
+if (LastValue(ValueWhen(Ref(Sell,-1),BarIndex())==BarIndex()) AND StaticVarGet(Name()+GetChartID()+"buyAlert")==0 )
+{
+pb.PushBullet("Sell Alert in " +Name() + " : SellPrice Value is " + SellPrice + " Time " + TimeNum());
+StaticVarSet(Name()+ GetChartID() + "sellAlertBar", LastValue(TimeNum()));
+}
+ 
+if (LastValue(TimeNum()) == StaticVarGet(Name()+GetChartID()+"sellAlertBar"))
+StaticVarSet(Name()+GetChartID()+"sellAlert",1); //alert was triggered, no more alerts on this bar
+else
+StaticVarSet(Name()+GetChartID()+"sellAlert",0); // new bar formed, and alerts can be trigered.
+ 
+_SECTION_END(); 

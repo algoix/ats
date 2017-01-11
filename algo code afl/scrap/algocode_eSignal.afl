@@ -1,0 +1,1124 @@
+_SECTION_BEGIN("algocode");
+AutoTradingParam = True;         //ParamToggle("AutoTrading","Off|On",0);
+SubmitOrders = True;             //ParamToggle("Create or Transmit","Create Only|Create and Transmit",False);
+Tracing = False;
+MarketOpen = 093000;//09:30:00;
+MarketClose = 160000;//04:00:00 
+MarketON = TimeNum() >= MarketOpen AND Now( 4 ) < MarketClose;
+MarketOFF = Now( 4 ) >= MarketClose ;//day's over
+function SayNotTooOften( text, Minperiod ) 
+{ 
+   elapsed=GetPerformanceCounter()/1000; 
+   Lastelapsed = Nz( StaticVarGet("lastsaytime") ); 
+
+   if( elapsed - Lastelapsed > Minperiod ) 
+   { 
+     StaticVarSet("lastsaytime", elapsed ); 
+     Say( text ); 
+   } 
+}
+
+// Interactive Brokers ticker symbols may have unwanted characters for our static variable names. Remove them.
+
+ABName = StrMid(Name(),0,3) + StrMid(Name(),4,3);
+IBName = Name();
+	
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+if( IsNull( AutoTrading ) ) 
+	StaticVarSet("AutoTrading"+ABName,0);
+
+if ( AutoTrading==0 && AutoTradingParam )
+{
+  // About to start AutoTrading after it's been off, so clear all order statuses. 
+        StaticVarSetText("OrderID"+ABName,"");
+        StaticVarSetText("OrderIDLMT"+ABName,"");
+        StaticVarSetText("OrderIDSTP"+ABName,"");
+        StaticVarSetText("OrderStatus"+ABName,"");
+        StaticVarSetText("OrderLMTStatus"+ABName,"");
+        StaticVarSetText("OrderStatusSTP"+ABName,"");
+}
+if ( AutoTrading && AutoTradingParam==0 )
+{
+  // About to stop AutoTrading after it's been on, so clear all order statuses.
+
+        StaticVarSetText("OrderID"+ABName,"");
+        StaticVarSetText("OrderIDLMT"+ABName,"");
+        StaticVarSetText("OrderIDSTP"+ABName,"");
+        StaticVarSetText("OrderStatus"+ABName,"");
+        StaticVarSetText("OrderLMTStatus"+ABName,"");
+        StaticVarSetText("OrderStatusSTP"+ABName,"");
+}
+
+if (AutoTradingParam) 
+	StaticVarSet("AutoTrading"+ABName,1);
+else  
+	StaticVarSet("AutoTrading"+ABName,0);
+
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+ 
+Filename 	= _DEFAULT_NAME();
+
+///Signal////
+period = 15;
+Pds=15;
+len=15;
+
+VolAvg = MA( V, len );
+VolumeIdx = V / VolAvg;
+AvgRange = Sum( abs(O-C),len )/len;
+//1//
+Var=MACD();
+Up=IIf(Var>Ref(Var,-1),abs(Var-Ref(Var,-1)),0);
+Dn=IIf(Var<Ref(Var,-1),abs(Var-Ref(Var,-1)),0);
+Ut=Wilders(Up,Pds);
+Dt=Wilders(Dn,Pds);
+RSIt=100*(Ut/(Ut+Dt));//1//
+rsitbuy=iif(RSIt<30,1,0);
+rsitsell=iif(RSIt>70,1,0);
+//2//
+HighMom = H - Ref( H, -2 );
+LowMom = L - Ref( L, -2 );
+Cond1 = ( H >= Ref( L,-5) OR H >= Ref( L, -6 ) );
+Num = IIf( cond1, HighMom + LowMom, 0 );
+Den = abs( HighMom ) + abs( LowMom );
+TDREI = 100 * Sum( Num, 5 )/Sum( Den, 5 ) ;//2//
+tderibuy=iif(TDREI<=-75,1,0);
+tderisell=iif(TDREI>=75,1,0);
+//3//
+
+highm = IIf( H > Ref( H, -1 ), H - Ref( H, - 1), 0 );
+lowm = IIf( L < Ref( L, -1 ), Ref( L, - 1 ) -L, 0 );
+dem = 100 * Sum( highm, 13 )/( Sum( lowm, 13 ) + Sum( highm, 13 ) );//3//
+dembuy=iif(dem<=40,1,0);
+demsell=iif(dem>=60,1,0);
+//4//
+
+//5//
+function ProjOsc(Pds) {
+
+// Slope of High {n period regression line of High)}
+SlopeHigh = ((Pds * (Sum( Cum(1) * High, Pds))) - (Sum( Cum(1),Pds) * (Sum(High, Pds)))) / ((Pds * Sum( Cum(1) ^ 2 , Pds)) - (Sum(Cum(1),Pds) ^2));
+
+//Slope of Low {n period regression line of Low}
+SlopeLow = ((Pds * (Sum( Cum(1) * Low, Pds))) - (Sum( Cum(1), Pds) * (Sum(Low, Pds)))) / ((Pds * Sum( Cum(1)^ 2, Pds)) - ( Sum(Cum(1),Pds) ^2));
+
+//Upper Projection Band
+UpProjBand = 0;
+for (i=0; i<Pds;i++) {
+UpProjBand =
+Max(Max(Ref(High,-i)+i*slopehigh,Ref(High,-i-1)+(i+1)*slopehigh),UpProjBand);
+}
+
+//Lower Projection Band
+LoProjBand = 10000;
+for (i=0; i<Pds;i++) {
+LoProjBand =
+Min(Min(Ref(Low,-i)+i*slopelow,Ref(Low,-i-1)+(i+1)*slopelow),LoProjBand);
+}
+
+//Projection Oscillator
+ProOsc = 100 * (Close - LoProjBand) / (UpProjBand - LoProjBand);
+
+return ProOsc;
+
+}
+aa= ProjOsc(Pds);//5//
+aabuy=iif((aa<Ref(aa,-1) AND C<Ref(C,-1)),1,0);
+aasell=iif((aa<Ref(aa,-1) AND C>Ref(C,-1)),1,0);
+//6//
+upday=IIf(C>Ref(C,-1),C-Ref(C,-1),0);
+downday=IIf(Ref(C,-1)> C,Ref(C,-1)-C,0);
+
+Stda=MA(StDev(C,8),5);//by default 5 is maperiod n 8 is stdevperiod
+V1=StDev(C,8)/Stda;
+TD=int(Pds/V1);//6//
+tdbuy=iif(TD<10,1,0);
+tdsell=iif(TD>21,1,0);
+//7//
+Su=Sum(upday,TD);
+Sd=Sum(downday,TD);
+M1=(Su-Sd);
+M2=abs(Su+Sd);
+DMI=50*(M1+M2)/M2;//7//
+dmibuy=iif(DMI<=30,1,0);
+dmisell=iif(DMI>=80,1,0);
+//8//
+StdOsc=( ( C+2 * StDev( C,pds ) - MA( C,pds ) ) / ( 4 * StDev( C,pds ) ) ) * 100;//8//
+stdoscbuy=iif(StdOsc<40,1,0);
+stdoscsell=iif(StdOsc>110,1,0);
+//9//
+ss = MA(StochK(len),5);
+StochBuy = IIf(ss<35, 1, 0);
+StochSell = IIf(ss>65, 1, 0);
+//10//
+/* KUP */
+KUP=EMA((H+L+C)/3,len)+EMA(H-L,len);
+KDOWN=EMA((H+L+C)/3,len)-EMA(H-L,len);
+kud=KUP-KDOWN;
+kupBuy = IIf(C<(KDOWN+kud/3), 1, 0);
+kupSell = IIf(C>(KUP-kud/6), 1, 0);
+//11/
+/*RSI*/
+vrsi= RSI(len);
+rsiBuy = IIf(Cross(vrsi,35), 1, 0);
+rsiSell = IIf(Cross(65,vrsi), 1, 0);
+//12//
+/*MFI*/
+mfiBuy = IIf(Cross(MFI(),30), 1, 0);
+mfiSell = IIf(Cross(70,MFI()), 1, 0);
+//13//
+/*STO2*/
+lookback = 14;
+buyrange = 30;
+sellrange = 70;
+stochKworkaround = StochK(len);
+stochDworkaround = EMA( StochD(len), 5);
+sto2Buy = IIf(StochD(len) < buyrange AND Cross(stochKworkaround, stochDworkaround), 1, 0);
+sto2Sell = IIf(StochD(len) > sellrange AND Cross(stochDworkaround, stochKworkaround), 1, 0);
+//14//
+/* %R, ema 9 and divergences */
+R=-100*((HHV(High,len)-Close))/(HHV(High,len)-LLV(Low,len));
+DIVR=(R-Ref(R,-1))*(C-Ref(C,-1));
+DIVB=IIf((DIVR>0) AND (R-Ref(R,-1))>0 AND (Ref(R,-1)<-90),-100,0);
+DIVS=IIf((DIVR<0) AND (R-Ref(R,-1))<0 AND (Ref(R,-1)>-10),-20,0);
+divBuy = IIf(DIVB==-100, 1, 0);
+divSell = IIf(DIVS==-20, 1, 0);
+//15/
+/*KST*/
+KST =  (MA(ROC(Close,10),10) * 1) + 
+            (MA(ROC(Close,15),10) * 2) +
+            (MA(ROC(Close,20),10) * 3) +
+            (MA(ROC(Close,30),15) * 4);
+kstBuy = IIf(KST<0, 1, 0);
+kstSell = IIf(KST>9, 1, 0);
+//16//
+copBuy = IIf((EMA( ROC( MA( C, 5 ), 15 ), 5) / 100) < 0, 1, 0);
+//17//
+/*SMASH*/
+numDays = 3; // Consider smash Day if closed above/below previous numDays highs/lows
+closeInDayRangePct = 0.25; // Smash day close should be in the high/low %% of the day range
+smashDayDown = Close < LLV (Ref (Low, -1), numDays) AND Close < Open AND Close < (Low + closeInDayRangePct * (High - Low));
+smashDayUp = Close > HHV (Ref (High, -1), numDays) AND Close > Open AND Close > (High - closeInDayRangePct * (High - Low));
+// Enter in the direction opposite to the smash day if the very next day price moves opposite the smash day.
+smashBuy = IIf(Ref (smashDayDown, -1) AND High > Ref (High, -1), 1, 0);
+smashSell = IIf(Ref (smashDayUp, -1) AND Low < Ref (Low, -1), 1, 0);
+//18//
+
+sk =100*( ( RSI( period ) - LLV( RSI( period ) , period ) ) / ( ( HHV( RSI(period ) , period ) ) - LLV(RSI( period ), period ) ) );//CCTStochasticRSI custom indicator
+skBuy = IIf(sk<20, 1, 0);
+skSell = iIf(sk>80, 1, 0);
+//20//
+RY  = H >  Ref(H, -1) AND L >= Ref(L, -1); // Rally Day
+RX  = H <= Ref(H, -1) AND L <  Ref(L, -1); // Reaction Day
+IN  = H <= Ref(H, -1) AND L >= Ref(L, -1); // Inside Day
+OUT = H >  Ref(H, -1) AND L <  Ref(L, -1); // Outside Day
+VolRY = Ref(V, - BarsSince(RY));
+VolRX = Ref(V, - BarsSince(RX));
+RYwithVol  = RY  AND V > IIF(RY, Ref(VolRY, -1), VolRY);  // Rally Day with Volume
+RXwithVol  = RX  AND V > IIF(RX, Ref(VolRX, -1), VolRX);  // Reaction Day with Volume
+PeriodRY = BarsSince(NOT RY);
+PeriodRX = BarsSince(NOT RX);
+ColeDay  = ValueWhen(RX or RY, Sum(RY, PeriodRY) - Sum(RX, PeriodRX));
+PeriodV    = BarsSince(V < Ref(V, -1) AND (RX or RY));
+ColeVolume = ValueWhen(RX or RY, Sum (RX+RY, PeriodV) +1);
+ColeDayBuy = IIf(ColeDay>0 AND ColeVolume>2, 1, 0);
+ColeDaySell = IIf(ColeDay<0 AND ColeVolume>2 , 1, 0);
+//21//
+Slw = 4;
+A = Ema((CLOSE-LLV(LOW,Pds))/(HHV(H,pds)-LLV(L,Pds)),Slw)*100;
+DSS = ema((A-LLV(A,pds))/(HHV(A,Pds)-LLV(A,Pds)),Slw)*100;//Double Smoothed Stochastic from W.Bressert ( oversold=20, overbought=80)
+DSSBuy = IIf(DSS<20, 1, 0);
+DSSSell = IIf(DSS >80, 1, 0);
+
+//22//
+r=ln(C/Ref(O,-15));
+z=(r-MA(r,5))/StdErr(r,5);
+pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+s=atan(z)*RTD;
+B1=IIf(s<LLV(s,30)*0.99,1,0);
+S1=IIf(s>HHV(s,30)*0.99,1,0);
+//23//
+pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+s=atan(C-O)*RTD;
+B2=IIf(s<LLV(s,30)*0.99,1,0);
+S2=IIf(s>HHV(s,30)*0.99,1,0);
+//24//
+P=Ref(O,-15);
+Hp=30;
+aa = LinRegIntercept(P,Hp); 
+bb = LinRegSlope(P,Hp); 
+res=C-(aa + bb *Ref(O,-1)); 
+B3=IIf(res<LLV(res,30)*0.99,1,0);
+S3 =IIf(res>HHV(res,30)*0.99,1,0);
+//25//
+CHL = Max(C,15 )-Min(C,15);
+OHL = Max(O,15)-Min (O,15);
+ratio=CHL/OHL;
+B4=IIf(ratio<0.9985,1,0);
+S4 =IIf(ratio>1.0015,1,0);
+
+//26//
+ pi = 4 * atan( 1 );
+RTD = 180 / pi;
+DTR = pi / 180;
+m=(H+C+O+L)/4;
+std=(m-MA(m,10))/StDev(m,10);
+wave=atan(std)*RTD;
+B5=IIf(Cross(wave,-62),1,0);
+S5=IIf(Cross(62,wave),1,0);
+//27//
+Longbar =15;
+shortbar=5;
+MAH = MA(Max(H,Longbar ),shortbar);
+MAL = MA(Min(L,Longbar ),shortbar);
+spread = MAH - MAL;
+r=(spread-MA(spread,shortbar))/StDerr(spread,shortbar);
+B6=IIf(r<LLV(r,30)*0.99,1,0);
+S6=IIf(r>HHV(r,30)*0.99,1,0);
+//28//
+N=15;
+CS = LinRegSlope(O, N);
+CI=LinRegIntercept(O, N);
+y=CI+CS*Ref(O,-1);
+s=y-O;
+B7=IIf(s<LLV(s,30)*0.99,1,0);
+S7=IIf(s>HHV(s,30)*0.99,1,0);
+//29//
+m=Ref((H+C+L+O)/4,-1);
+CS = LinRegSlope(m, 30);
+CI=LinRegIntercept(m, 30);
+y=m-(CI+CS*m);
+z=(y-MA(y,30))/StdErr(y,30);
+B8=IIf(z<LLV(z,30)*0.99,1,0);
+S8=IIf(z>HHV(z,30)*0.99,1,0);
+//30//
+Index="$NDX";
+Hp=10;
+Lp=1;
+Longbar =20;
+shortbar=5;
+P=Foreign(index,"C",Lp);
+Correl=Correlation(P,O,Hp);
+B9=IIf(Cross(Correl,0.20),1,0);
+S9=IIf(Cross(0.95,Correl),1,0);
+//31//
+function TTF( periods )
+{
+	BuyPower = HHV( High, periods ) - Ref( LLV( Low, periods ), -periods );
+	SellPower = Ref( HHV( High, periods ), -periods ) - LLV( Low, periods );
+	return 100 * (BuyPower - SellPower) / (0.5 * (BuyPower + SellPower));
+}
+
+tt = TTF(15);
+UCL =HHV(tt,60);
+LCL =LLV(tt,60);
+B10=iif(tt<LLV(tt,30)*0.99,1,0);
+S10=iif(tt>HHV(tt,30)*0.99,1,0);
+
+//33//
+/* Candle Codes */
+White = IIf((C>O) AND ((C-O)>=0.8*(H-L)),1,0) AND (C-O)>AvgRange;
+Black = IIf((C<O) AND ((O-C)>=0.8*(H-L)),1,0) AND (O-C)>AvgRange;
+Doji  = IIf(abs(O-C)<=0.1*(H-L),1,0);
+/* Dark Cloud Cover [Bear] */
+DCC = IIf(Ref(White, -1) AND Black AND C<=Ref(((H+L)/2),-1) AND O>Ref(C,-1), 1,0);
+/* Piercing Line [Bull] */
+PL = IIf(Ref(Black, -1) AND White AND C>=Ref(((H+L)/2),-1) 	AND O<Ref(C,-1), 1,0);
+/* Evening Doji Star [Bear] */
+EDS = IIf(Ref(White, -2) AND Ref(Doji, -1) AND Black AND 	C<=Ref(((H+L)/2),-2), 1,0);
+/* Morning Doji Star [Bull] */
+MDS = IIf(Ref(Black, -2) AND Ref(Doji, -1) AND White AND 	C>=Ref(((H+L)/2),-2), 1,0);
+/* Hammer [Bull] */
+HAM = IIf( (H-L > 1.5*AvgRange) AND (C > (H+L)/2)  AND (O > C) AND 	(VolumeIdx > 2), 1, 0);
+/* Bearish Engulfing */
+BRE = IIf(Black AND Ref(White, -1) AND (C < Ref(O, -1))  AND (O > Ref(C, -1)), 1,0);
+/* Bullish Engulfing */
+BLE = IIf(White AND Ref(Black, -1) AND (C > Ref(O,-1))  AND (O < Ref(C,-1)), 1,0);
+//34//
+//###########################################
+WhiteBody = C > O;
+BigWhite = (Close - Open)/Open > 0.015 AND (Close - Open) * 2 > High - Low;
+BlackBody = C < O;
+BigBlack = (Open - Close)/Open > 0.015 AND (Open - Close) * 2 > High - Low;
+Big = abs((Close - Open)/Open) > 0.014;
+LongUpperShadow = H - Max(O,C) > (H - L)*0.67;
+LongLowerShadow = Min(O,C) - L > (H - L)*0.67;
+rng = abs((C-O)/O);
+lowerShadow = Min(O,C) - L;
+uppershadow = H - Max(O,C);
+body = abs(O-C);
+rngx = abs(H - L);
+rngy = H-L;
+shaven = lowerShadow < rngy*0.1;
+ShavenBottom = L == Min(O,C);
+ShavenHead = H == Max(O,C);
+prevSize = abs(Ref(O,-1)-Ref(C,-1));
+currentSize = abs(O-C);
+fwh = Ref(H,-4);
+fwl = Ref(L,-4); 
+isPrevLargeWhite = Ref(big,-1) AND Ref(whitebody,-1);
+SmallRealBody = rng < 0.003 AND rng >0;   
+Diff = abs((prevSize - currentSize) / currentSize);
+DownTrend = (H < Ref(H,-1) AND L < Ref(L,-1));
+UpTrend = (H > Ref(H,-1) AND L > Ref(L,-1));
+isPrevUpTrend = Ref(uptrend,-1);
+RealBodyGapUp = Min(O,C) > Max(Ref(O,-1),Ref(C,-1));
+RealBodyGapDown = Max(O,C) < Min(Ref(O,-1),Ref(C,-1));
+FallingWindow = Ref(downtrend,-1) AND GapDown();
+RisingWindow = Ref(uptrend,-1) AND GapUp();
+isfalling = bigblack AND fallingwindow;
+isrising = bigwhite AND risingwindow;
+rwh = Ref(H,-4);
+rwl = Ref(L,-4);
+isFallingBlack = Ref(fallingwindow,-1) AND Ref(blackbody,-1);
+horw = Ref(H,-2); 
+windowOpen = C < horw;
+opensInside = O < Ref(O,-1) AND O > Ref(C,-1);
+similarSize = diff <= 0.25;
+GapUpFromWhite = realBodyGapUp AND isPrevLargeWhite AND isPrevUptrend;
+isPrevLargeBlack = Ref(big,-1) AND Ref(blackbody,-1);
+isPrevDownTrend = Ref(downtrend,-1);
+GapDownFromBlack = realBodyGapDown AND isPrevLargeBlack AND isPrevDowntrend;
+isRisingWhite = Ref(risingwindow,-1) AND Ref(whitebody,-1);
+lorw = Ref(L,-2);
+windowOpenx = C > lorw;
+Doji = C == O AND V > 0;
+LongLeggedDoji = doji AND (H - L)/L > 0.01;
+StarUp = smallRealBody AND gapUpFromWhite;
+DojiStarUp = doji AND gapUpFromWhite;
+DojiStarDown = doji AND gapDownFromBlack;
+StarDown = smallRealBody AND gapDownFromBlack;
+isPrevDownTrendx = Ref(downtrend,-3);
+firstDoji = Ref(doji,-2); 
+secDojiLower = Ref(doji,-1) AND Ref(realBodyGapDown,-1);
+isPrevUpTrendx = Ref(uptrend,-3);
+secDojiHigher = Ref(doji,-1) AND Ref(realBodyGapUp,-1);
+BeltHold = shavenbottom AND shavenhead AND big;
+Engulfing = Max(O,C) > Ref(Max(O,C),-1) AND Min(O,C) < Ref(Min(O,C),-1);
+UmbrellaLine = uppershadow < rngx*0.1 AND lowershadow > body*2; 
+//====================================================================================================
+ 
+//----------------------------------------
+// Bearish
+//----------------------------------------
+ 
+// Kicker
+KBR = Ref(O,-1) < Ref(C,-1) AND O <= Ref(O,-1) AND C <= O;
+ 
+//Evening Doji Star
+EveningDojiStar = Ref(dojiStarUp,-1) AND blackbody AND big AND C < Ref((O + C)/2,-2);
+/*
+A large white candlestick followed by a doji that gaps up from the
+previous candles real body. This is followed by a third candlestick that is black and has a
+close lower than the half way point of the first candlesticks real body. Must be preceeded by an uptrend.
+*/
+ 
+// Evening Star
+EveningStar = Ref(starUp,-1) AND blackbody AND big AND C < Ref((O + C)/2,-2);
+/*
+A large white candlestick followed by a small real body of either colour that gaps up from the
+previous candles real body. This is followed by a third candlestick that is black and has a
+close lower than the half way point of the first candlesticks real body. Must be preceeded by an uptrend.
+*/
+ 
+// Grave Stone Doji
+GraveStoneDoji = longleggeddoji AND L == C AND Ref(uptrend,-1);
+/*
+A doji with no lower shadow and an extremenly long upper shadow. Must be preceeded by an uptrend.
+*/
+ 
+//Bear 3 Formation
+Bear3Formation = bigblack AND C < Ref(C,-4) AND
+Ref(H,-1) <= fwh AND Ref(L,-1) >= fwl AND
+Ref(H,-2) <= fwh AND Ref(L,-2) >= fwl AND
+Ref(H,-3) <= fwh AND Ref(L,-3) >= fwl AND
+Ref(isfalling, -4);
+/*A strong black candle in a falling window, followed by three
+ candles that fall within the high/low range of the strong black candle, followed
+ by another strong black candle that closes below the close of the first black candle. 
+ This is a bearish confirmation.*/
+ 
+//Bearish Abandoned Baby
+BearishAbandonedBaby = EveningDojiStar AND Ref(GapUp(),-1) AND GapDown();
+/*
+An evening doji star where there is a gap between the lower shadow of the doji and
+the upper shadows of the prior and next candle.
+*/
+ 
+//Bearish Belt Hold
+BearishBeltHold = belthold AND blackbody AND Ref(uptrend,-1);
+/*
+A large black candle with a shaven head and bottom preceeded by an uptrend.
+*/
+ 
+//Bearish Counter Attack
+BearishCounterAttack = Ref(big AND whitebody,-1) AND O > Ref(H,-1) AND C == Ref(C,-1) AND big AND blackbody AND Ref(uptrend,-1);
+/*
+A large white candle followed by a black candle which opens sharply higher but closes
+at the prior black candles close. Must be preceeded by an uptrend.
+*/
+ 
+// Bearish Harami Cross
+BearishHaramiCross = doji AND Ref(C,-1) > O AND Ref(O,-1) < O AND Ref(big AND whitebody,-1) AND Ref(uptrend,-1);
+/* A doji preceded by and contained within the real body of a big white candlestick in an uptrend */
+ 
+// Bearish Harami
+BearishHarami = Ref(big AND whitebody,-1) AND smallRealBody AND Min(O,C) > Ref(O,-1) AND Max(O,C) < Ref(C,-1) AND Ref(uptrend,-1);
+/* A small candlestick preceded by and whose real body is contained within, the real body of a big white candlestick in an uptrend*/
+ 
+// Bearish Separating Line
+BearishSeparatingLine = Ref(whitebody AND big,-1) AND blackbody AND big AND O == Ref(O,-1) AND Ref(downtrend,-1); 
+/* A white candlestick followed by a black candlestick with the same opening price. Continues  the previous downtrend. */
+ 
+// Dark Cloud Cover
+DarkCloudCover = Ref(bigwhite,-1) AND blackbody AND O > Ref(H,-1) AND C <= Ref((O+C)/2,-1) AND C > Ref(O,-1) AND Ref(uptrend,-1);
+/* A strong white candle in an uptrend followed by a black candle that opens above the high of the  white candle and closes at least 50 percent into the white candles real body. Note that if the black candle completely
+engulfs the white candles real body then this is not Dark Cloud Cover but a Bearish Engulfing Pattern. */
+ 
+ 
+// Engulfing Bear
+EngulfingBear = Ref(whitebody,-1) AND blackbody AND engulfing AND Ref(uptrend,-1);
+/* This bar is black and its real body engulfs the previous bars white real body. Must be preceeded by an uptrend.
+*/
+ 
+//Hamging Man
+HangingMan = umbrellaline AND uptrend AND Ref(uptrend,-1);
+/* The same as a hammer except must be preceeded by an uptrend. */
+ 
+//Shooting Star
+ShootingStar = smallRealBody AND shaven AND realBodyGapUp AND longuppershadow AND Ref(uptrend,-1);
+/*
+A small body that closes near the bottom of its range and 
+has a long upper shadow. There must be a real body gap up from the previous sessions candle. This
+pattern occurs only after an uptrend.
+*/
+ 
+//Three Black Crows
+ThreeBlackCrows = (big AND blackbody) AND Ref(big AND blackbody, -1) AND Ref(big AND blackbody, -2) AND O < Ref(O,-1) AND Ref(O,-1) < Ref(O,-2) AND Ref(uptrend,-4);
+/*
+The last three candlesticks are large and black. Each opens within or lower than the 
+ previous candles real body.Must be preceeded by an uptrend.
+*/
+ 
+// Tri-Star Bottom
+TriStarBottom = firstDoji AND secDojiLower AND doji AND realBodyGapUp AND isPrevDownTrendx;
+/*
+A doji followed by a lower doji which is followed by another doji that is higher than the
+second doji. Must be preceeded by a downtrend.
+*/
+ 
+//Tweezer Tops
+TweezerTops = H == Ref(H,-1) AND Ref(big AND whitebody,-1) AND Ref(uptrend,-2);
+/* A large candle followed by a candle with the same high. Must be preceeded by an uptrend. */
+ 
+// Upside Gap Two Crows
+UpsideGapTwoCrows = Ref(big AND whitebody,-2) AND Ref(realBodyGapUp,-1) AND Ref(smallRealBody,-1) AND Ref(blackbody,-1) AND engulfing AND blackbody AND C > Ref((O+C)/2,-2) AND Ref(uptrend,-2);
+/* A strong white candle followed by a small black candle which gaps above the previous 
+candles real body, followed by a black candle which engulfs the previous black candle. Preceeded by an uptrend. */
+ 
+//----------------------------------------
+// Bullish
+//----------------------------------------
+ 
+// Kicker
+KBL = Ref(O,-1) > Ref(C,-1) AND O >= Ref(O,-1) AND C > O; 
+ 
+// Morning Star
+MorningStar = Ref(starDown,-1) AND whitebody AND big AND C > Ref((O + C)/2,-2);
+/*
+A large black candlestick followed by a small real body of either colour,
+ that gaps below the previous black candles real body, with a third white candlestick, that has a close 
+ higher than the half way point of the first black candlestick. Must be preceeded by a downtrend.
+*/
+ 
+// Morning Doji Star
+MorningDojiStar = Ref(dojiStarDown,-1) AND whitebody AND big AND C > Ref((O + C)/2,-2);
+/*
+A large black candlestick followed by a doji that gaps below its real body, with a third
+ white candlestick, that has a close at least half of the way up the black candlestick. Must be preceeded by a
+ downtrend.
+*/
+ 
+// Bull 3 Formation
+Bull3Formation = bigwhite AND C > Ref(C,-4) AND
+Ref(H,-1) <= rwh AND Ref(L,-1) >= rwl AND
+Ref(H,-2) <= rwh AND Ref(L,-2) >= rwl AND
+Ref(H,-3) <= rwh AND Ref(L,-3) >= rwl AND
+Ref(isrising, -4);
+/*
+A strong white candle in a rising window, followed by three 
+ candles that fall within the high/low range of the strong white candle, followed
+ by another strong white candle that closes above the close of the first white candle. 
+ This is confirmation of the Bullish trend."
+*/
+ 
+// Bullish Abandoned Baby
+BullishAbandonedBaby = morningdojistar AND Ref(GapDown(),-1) AND GapUp();
+/*
+A morning doji star where there is a gap between the lower shadow of the doji and
+the prior and next candle.
+*/
+// Bullish Belt Hold
+BullishBeltHold = belthold AND whitebody AND Ref(downtrend,-1);
+/*
+A large white candle with no upper or lower shadow preceeded by a downtrend.
+*/
+ 
+// Bullish Counter Attack
+BullishCounterAttack = Ref(big AND blackbody,-1) AND O < Ref(H,-1) AND C == Ref(C,-1) AND big AND whitebody AND Ref(downtrend,-1);
+/*
+A large black candle followed by a white candle which opens sharply lower but closes at the 
+prior white candles close. Must be preceeded by a downtrend
+*/
+ 
+// Bullish Harami Cross
+BullishHaramiCross = doji AND Ref(O,-1) > O AND Ref(C,-1) < O AND Ref(big AND blackbody,-1) AND Ref(downtrend,-1);
+/*
+A doji preceded by and contained within the real body of a big 
+black candlestick in a downtrend.
+*/
+ 
+// Bullish Harami
+BullishHarami = Ref(big AND blackbody,-1) AND smallRealBody AND Min(O,C) > Ref(C,-1) AND Max(O,C) < Ref(O,-1) AND Ref(downtrend,-1);
+/*
+A small candlestick, preceded by, and whose body is contained within a big black 
+candlestick in a downtrend
+*/
+ 
+// Bullish Separating Line
+BullishSeparatingLine = Ref(blackbody AND big,-1) AND whitebody AND big AND O == Ref(O,-1) AND Ref(uptrend,-1);
+/*
+A black candlestick followed by a white candlestick with the same opening price. Continues
+ the previous uptrend.
+*/
+ 
+//Dragonfly Doji
+DragonflyDoji = longleggeddoji AND H==C AND Ref(downtrend,-1);
+/*A doji with no upper shadow AND a long lower shadow preceeded by a downtrend.*/
+ 
+// Engulfing Bull
+EngulfingBull = Ref(blackbody,-1) AND whitebody AND engulfing AND Ref(downtrend,-1);
+/*
+This bar is white and its real body engulfs the previous bars black real body. Must be
+preceeded by a downtrend.
+*/
+ 
+// Hammer
+Hammer = umbrellaline AND Ref(downtrend,-1);
+/*
+The upper shadow is less than ten percent of the range
+ and the lower shadow is more than two times the size of the body. Must be preceeded by a downtrend.
+*/
+ 
+//Inverted Hammer
+InvertedHammer = smallRealBody AND shaven AND realBodyGapDown AND longuppershadow AND Ref(downtrend,-1);
+/*
+An upside down Hammer that appears after a downtrend
+*/
+ 
+//Piercing Line
+PiercingLine = Ref(bigblack,-1) AND whitebody AND O < Ref(L,-1) AND C >= Ref((O+C)/2,-1) AND C < Ref(O,-1) AND Ref(downtrend,-1);
+/*
+A stong black candle followed by a white candle that opens below the low of
+the prior black candle but closes more than halfway into the black candles real body. Preceeded by a downtrend. Note that if the
+white candle engulfs the prior black candles real body then this is a Bullish Engulfing Pattern not a Piercing Pattern
+*/
+ 
+// SeperatingLines
+SeperatingLines = O == Ref(O,-1) AND (blackbody AND Ref(whitebody,-1) OR whitebody AND Ref(blackbody,-1));
+/*
+a black candlestick is followed by a white candlestick, or a white with a black,and they have the same opening prices.
+*/
+ 
+//Three White Soldiers
+ThreeWhiteSoldiers = (whitebody AND big) AND Ref(whitebody AND big,-1) AND Ref(whitebody AND big,-2) AND O > Ref(O,-1) AND Ref(O,-1) > Ref(O,-2);
+/*
+The last three candlesticks are large and white. Each opens within or higher than the 
+ previous candles real body.
+*/
+ 
+// Tri-Star Top
+TriStarTop = firstDoji AND secDojiHigher AND doji AND realBodyGapDown AND isPrevUpTrendx;
+/*
+A doji followed by a higher doji which is followed by another doji that is lower than the
+second doji. Must be preceeded by an uptrend.
+*/
+ 
+// Tweezer Bottoms
+TweezerBottoms = L == Ref(L,-1) AND Ref(big AND blackbody,-1) AND Ref(downtrend,-2);
+/* A large candle followed by a candle with the same Low. Must be preceeded by a downtrend. */
+ 
+ 
+//----------------------------------------
+// Continuation
+//----------------------------------------
+ 
+// Downward Gapping Tasuki
+DownwardGappingTasuki = isFallingBlack AND whitebody AND opensInside AND C > Ref(O,-1) AND windowOpen AND similarSize;
+/* A black candle that gaps down followed by a similarly sized white candle that opens Inside the black candles real body AND closes above it. */
+ 
+//Upward Gapping Tasuki
+UpwardGappingTasuki = isRisingWhite AND blackbody AND opensInside AND C < Ref(O,-1) AND  windowOpenx AND similarSize;
+/* A white candle that gaps up followed by a similarly sized black candle that opens Inside the white candles real body AND closes below it; */
+ 
+//Inverted Black Hammer
+InvertedBlackHammer = blackbody AND InvertedHammer;
+ 
+ 
+ 
+STS = /*Bears*/
+WriteIf(KBR, "Bearish Kicker", 
+WriteIf(EveningDojiStar, "Evening Doji Star", 
+WriteIf(EveningStar, "Evening Star",
+WriteIf(GraveStoneDoji, "Grave Stone Doji",
+WriteIf(Bear3Formation, "Bear 3 Formation",
+WriteIf(BearishAbandonedBaby, "Bearish Abandoned Baby",
+WriteIf(BearishBeltHold, "Bearish Belt Hold",
+WriteIf(BearishCounterAttack, "Bearish Counter Attack",
+WriteIf(BearishHaramiCross, "Bearish Harami Cross",
+WriteIf(BearishHarami, "Bearish Harami",
+WriteIf(BearishSeparatingLine, "BearishSeparatingLine",
+WriteIf(DarkCloudCover, "DarkCloudCover",
+WriteIf(EngulfingBear, "Engulfing Bear",
+WriteIf(HangingMan, "Hanging Man",
+WriteIf(ShootingStar, "Shooting Star",
+WriteIf(ThreeBlackCrows, "Three Black Crows",
+WriteIf(TriStarBottom, "TriStar Bottom",
+WriteIf(TweezerTops, "Tweezer Tops",
+WriteIf(UpsideGapTwoCrows, "UpsideGapTwoCrows", 
+/*Bulls*/
+WriteIf(KBL, "Bullish Kicker",
+WriteIf(MorningStar, "Morning Star",
+WriteIf(MorningDojiStar, "Morning Doji Star",
+WriteIf(Bull3Formation, "Bull 3 Formation",
+WriteIf(BullishAbandonedBaby, "Bullish Abandoned Baby",
+WriteIf(BullishBeltHold, "Bullish Belt Hold",
+WriteIf(BullishCounterAttack, "Bullish Counter Attack",
+WriteIf(BullishHaramiCross, "Bullish Harami Cross",
+WriteIf(BullishHarami, "Bullish Harami",
+WriteIf(BullishSeparatingLine, "Bullish Separating Line",
+WriteIf(DragonflyDoji, "Dragonfly Doji",
+WriteIf(EngulfingBull, "Engulfing Bull",
+WriteIf(Hammer, "Hammer",
+WriteIf(InvertedHammer, "Inverted Hammer",
+WriteIf(PiercingLine, "Piercing Line",
+WriteIf(SeperatingLines, "Seperating Lines",
+WriteIf(ThreeWhiteSoldiers, "Three White Soldiers",
+WriteIf(TriStarTop, "Tri-Star Top",
+WriteIf(TweezerBottoms, "Tweezer Bottoms",""))))))))))))))))))))))))))))))))))))));
+ 
+ 
+Col =   IIf(KBR OR EveningDojiStar OR EveningStar OR GraveStoneDoji OR Bear3Formation OR BearishAbandonedBaby
+        OR BearishBeltHold OR BearishCounterAttack OR BearishHaramiCross OR BearishHarami OR BearishSeparatingLine
+        OR DarkCloudCover OR EngulfingBear OR HangingMan OR ShootingStar OR ThreeBlackCrows OR TriStarBottom 
+        OR TweezerTops OR UpsideGapTwoCrows, colorRed, IIf( MorningStar OR MorningDojiStar OR Bull3Formation
+        OR BullishAbandonedBaby OR BullishBeltHold OR BullishCounterAttack OR BullishHaramiCross
+        OR BullishHarami OR BullishSeparatingLine OR DragonflyDoji OR EngulfingBull OR Hammer OR InvertedHammer
+        OR PiercingLine OR SeperatingLines OR ThreeWhiteSoldiers OR TriStarTop OR TweezerBottoms OR KBL, colorGreen, 0));
+//########################
+//Double top and bottom
+percdiff = 5; /* peak detection threshold */
+fwdcheck = 5; /* forward validity check */
+mindistance = 10;
+validdiff = percdiff/10;
+PK= Peak( H, percdiff, 1 ) == High;
+TR= Trough( L, percdiff, 1 ) == Low;
+x = Cum( 1 );
+XPK1 = ValueWhen( PK, x, 1 );
+XPK2 = ValueWhen( PK, x, 2 );
+xTR1 = ValueWhen( Tr, x, 1 );
+xTr2 = ValueWhen( Tr, x, 2 );
+peakdiff = ValueWhen( PK, H, 1 )/ValueWhen( PK, H, 2 );
+Troughdiff=ValueWhen( tr, L, 1 )/ValueWhen( tr, L, 2 );
+doubletop = PK AND abs( peakdiff - 1 ) < validdiff AND (Xpk1 -Xpk2)>mindistance AND High > HHV( Ref( H, fwdcheck ), fwdcheck - 1 );
+doubleBot=tr AND abs( troughdiff - 1 ) < validdiff AND (Xtr1 -Xtr2)>mindistance AND Low < LLV( Ref( L, fwdcheck ), fwdcheck - 1 );
+///////////////
+// Determines trend direction using DMI indicators
+PDIFilter = PDI(period) > MDI(period);
+MDIFilter = MDI(period) > PDI(period);
+VOLFilter = LLV(V,30) > 250000; // Volume Filter - LLV(V,period) > # / Returns TRUE if 3 to 7 day pullback in up or down trend
+UPB3 = H <= Ref(H,-1) AND Ref(H,-1) <= Ref(H,-2) AND Ref(H,-2) <= Ref(H, -3);
+UPB4 = UPB3 AND Ref(H,-3) <= Ref(H,-4);
+UPB5 = UPB4 AND Ref(H,-4) <= Ref(H,-5);
+UPB6 = UPB5 AND Ref(H,-5) <= Ref(H,-6);
+UPB7 = UPB6 AND Ref(H,-6) <= Ref(H,-7);
+DPB3 = L >= Ref(L,-1) AND Ref(L,-1) >= Ref(L,-2) AND Ref(L,-2) >= Ref(L, -3);
+DPB4 = DPB3 AND Ref(L,-3) >= Ref(L,-4);
+DPB5 = DPB4 AND Ref(L,-4) >= Ref(L,-5);
+DPB6 = DPB5 AND Ref(L,-5) >= Ref(L,-6);
+DPB7 = DPB6 AND Ref(L,-6) >= Ref(L,-7);
+
+// New 2 month low has occurred in the last 5 days?
+NewHighs   = IIf(HHV(H,5) >= HHV(H,40), 1, 0);
+NewLows    = LLV(L,5) <= LLV(L,40);
+// Are moving averages lined up correctly?
+BullishMAs = IIf(MA(C,10) >= EMA(C,20) AND EMA(C,20) >= EMA(C,30), 1, 0);
+BearishMAs = IIf(MA(C,10) <= EMA(C,20) AND EMA(C,20) <= EMA(C,30), 1, 0);
+
+BSign = IIf(PDIFilter AND (UPB3 OR UPB4 OR UPB5 OR UPB6 OR UPB7) AND NewHighs AND BullishMAs AND VOLFilter, 1, 0); // "Buy Signal"
+BStop = IIf(BSign == 1, H + .125, 0); // "Buy Stop"
+SSign = IIf(MDIFilter AND (DPB3 OR DPB4 OR DPB5 OR DPB6 OR DPB7) AND NewLows AND BearishMAs AND VOLFilter, 1, 0); // "Sell Signal"
+SStop = IIf(SSign == 1, L - .125, 0); // "Sell Stop"
+/////////////
+
+//****Beta***********************/ 
+Periods=21;//Set the period of Observation 
+Beta=(( Periods * Sum(ROC( C,1) * ROC(P,1),Periods )) - (Sum(ROC(C,1),Periods) * Sum(ROC( P,1),Periods))) / ((Periods * Sum((ROC(P,1)^2 ),Periods)) - (Sum(ROC(P,1 ),Periods)^2 ));
+ret=ROC(C,15)-Beta*(ROC(P,15));
+
+sommebuy= PL+MDS+HAM+BLE+rsitbuy+tderibuy+dembuy+aabuy+tdbuy+dmibuy+stdoscbuy+StochBuy+ kupBuy + rsiBuy + mfibuy+ sto2Buy + divBuy + kstBuy + copBuy+smashBuy + skBuy+ColeDayBuy+DSSBuy+B1+B2+B3+B4+B5+B6+B7+B8+B9+B10;
+sommesell=DCC+EDS+BRE+rsitsell+tderisell+demsell+aasell+tdsell+dmisell+stdoscsell+StochSell+kupSell+mfisell+sto2Sell+divSell+kstSell+smashSell+skSell+ColeDaySell+DSSSell+S1+S2+S3+S4+S5+S6 +S7 +S8 +S9+ S10;
+
+
+Buy=sommebuy>5 AND sommesell<2 AND ret<0 AND C<MA(C,300)*1.03 AND C>MA(C,300)/1.04 AND V>MA(V,600);
+Cover=Buy;
+Short=sommesell>5 AND sommebuy<2 AND ret>0.2;
+Sell=Short;
+ShortPrice = Min(Ref(C,-1),C); //Or as appropriate for your trading rules.
+BuyPrice = Max(Ref(C,-1),C); //Or as appropriate for your trading rules.
+
+Filter = (sommebuy>5 AND sommesell<2 and ret<0 AND C<MA(C,300)*1.03 AND C>MA(C,300)/1.04 AND V>MA(V,600)) OR (sommesell>5 AND sommebuy<2 AND ret>0.2); 
+
+
+///////Ordering System////
+
+
+
+PrevDT = StaticVarGet("DateTime"+ABName);
+DT = LastValue(DateTime());
+NewBar = DT != PrevDT;                        
+StaticVarSet("DateTime"+ABName,DT);
+
+if( NewBar )
+{
+    // Clear all status so we can place a new order on each bar. Later, the status variables are checked to ensure  that we place no more than 1 order on each bar.
+
+    StaticVarSetText("OrderID"+ABName,"");
+    StaticVarSetText("OrderIDLMT"+ABName,"");
+    StaticVarSetText("OrderIDSTP"+ABName,"");
+    StaticVarSetText("OrderStatus"+ABName,"");
+    StaticVarSetText("OrderLMTStatus"+ABName,"");
+    StaticVarSetText("OrderStatusSTP"+ABName,"");
+}
+ 
+
+
+LastBuy = LastValue(Buy);
+LastShort = LastValue(Short);
+LastShortPrice=LastValue(ShortPrice);
+LastBuyPrice=LastValue(BuyPrice);
+
+
+IBPosSize=0;
+
+ibc = GetTradingInterface("IB");
+IBcStatus = ibc.IsConnected();
+
+
+IBcStatusString = WriteIf(IBCStatus==0,"TWS Not Found",WriteIf(IBCStatus==1,"Connecting to TWS", WriteIf(IBCStatus==2,"TWS OK", WriteIf(IBCStatus==3,"TWS OK (msgs)",""))));
+
+// Work out how much money there is and adjust risk size
+
+CashBalanceStr = ibc.GetAccountValue("NetLiquidationByCurrency");
+if (CashBalanceStr == "")
+    CashBalance = 0;
+else
+    CashBalance = StrToNum(CashBalanceStr);
+
+
+OldOrderID = StaticVarGetText("OrderID"+ABName);
+if (AutoTrading == 0 && OldOrderID == "" && (LastBuy || LastShort))
+{
+    // If there would have been an order during Autotrading, then create a dummy OID to test all other code paths
+    // e.g. logging, explore output etc.
+    StaticVarSetText("OrderID"+ABName,"DUMMY");
+}
+
+if( IBcStatus AND AutoTrading AND LastValue(MarketON) )
+{
+    OID = StaticVarGetText("OrderID"+ABName);
+    IBPosSize = ibc.GetPositionSize( IBName );
+    BuyPending=ibc.IsOrderPending(OID);
+    SellPending=ibc.IsOrderPending(OID);
+    averageprice=0;
+    size=int(2000/C);
+    openpos = ibc.GetPositionList();   
+        for( i = 0; ( symbol = StrExtract( openpos, i ) ) != ""; i++ ) 
+		{ 
+			if(symbol==Name())
+			{
+			aprice = ibc.GetPositionInfo(symbol, "Avg. cost");
+			averageprice=aprice; 
+			} 
+		} 
+			// Only enter once the price moves in my desired direction, otherwise wait until next run of the exploration and check again, and again., ...
+    if( LastBuy AND OID == " " AND ibc.GetPositionSize(Name())==0)  
+    {
+        OID= ibc.PlaceOrder( Name(), "Buy",size, "LMT",(C-0.04), 0, "Day", True); 
+        StaticVarSetText("OrderID"+ABName,OID);
+        if( BuyPending )
+			{
+			ibc.CancelOrder( OID ); 
+			}
+
+            
+        if (SubmitOrders)
+        {
+            for (dummy=0; dummy<40; dummy++)
+                ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+
+             // Wait until order actually PreSubmitted - this will prevent submitting another order too quickly
+             //     hopefully stops TWS/IB getting in a knot
+
+             tradetime=GetPerformanceCounter()/1000; 
+             while ((GetPerformanceCounter()/1000 - tradetime) < 5) // give up after 5 seconds
+             {
+                 ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                 ORderStatus = ibc.GetStatus( OID, True);
+                 if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted"|| ORderStatus == "Filled")
+                     break;
+             }
+        }
+    }
+    if( LastBuy AND OID == " " AND  ibc.GetPositionSize(Name())>1)  
+    {
+        OID= ibc.PlaceOrder( Name(), "Buy",size, "LMT",(averageprice/1.015), 0, "Day", True); 
+         StaticVarSetText("OrderID"+ABName,OID);
+        if( BuyPending )
+			{
+			ibc.CancelOrder( OID ); 
+			}
+       
+        if (SubmitOrders)
+        {
+            for (dummy=0; dummy<40; dummy++)
+                ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+
+             // Wait until order actually PreSubmitted - this will prevent submitting another order too quickly
+             //     hopefully stops TWS/IB getting in a knot
+
+             tradetime=GetPerformanceCounter()/1000; 
+             while ((GetPerformanceCounter()/1000 - tradetime) < 5) // give up after 5 seconds
+             {
+                 ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                 ORderStatus = ibc.GetStatus( OID, True);
+                 if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted"|| ORderStatus == "Filled")
+                 break;
+             }
+        }
+    }
+    
+	// Only enter once the price moves in my desired direction, otherwise wait until next run of the exploration
+	//     and check again, and again., ...
+    if( LastShort AND OID == "" AND ibc.GetPositionSize(Name())>20)
+ 
+    {
+       OID = ibc.PlaceOrder(Name(), "Sell",IBPosSize/2, "LMT", (averageprice*1.01), 0, "Day",True );
+       StaticVarSetText("OrderID"+ABName,OID);
+			if( SellPending )
+			{
+				ibc.CancelOrder( SellOrderID ); 
+				
+			}
+             
+        SayNotTooOften("There is an order to be checked",30);
+
+        if (SubmitOrders)
+        {
+            //Usually takes about a second for TWS to get acknowledgement from IB, so delay for 2 secs for safety
+            for (dummy=0; dummy<40; dummy++)
+                ibc.Sleep(50);  
+
+             // Wait until order actually PreSubmitted - this will prevent submitting another order too quickly
+             //     hopefully stops TWS/IB getting in a knot
+
+            tradetime=GetPerformanceCounter()/1000; 
+            while ((GetPerformanceCounter()/1000 - tradetime) < 5) // give up after 5 seconds
+            {
+                ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                ORderStatus = ibc.GetStatus( OID, True);
+                if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted"|| ORderStatus == "Filled")
+                break;
+            }
+        }
+    }
+    if( LastShort AND OID == "" AND ibc.GetPositionSize(Name())>0)
+ 
+    {
+       OID = ibc.PlaceOrder(Name(), "Sell",IBPosSize, "LMT", (averageprice*1.015), 0, "Day",True );
+       StaticVarSetText("OrderID"+ABName,OID);
+			if( SellPending )
+			{
+				ibc.CancelOrder( SellOrderID ); 
+				
+			}
+  
+        if (SubmitOrders)
+        {
+            //Usually takes about a second for TWS to get acknowledgement from IB, so delay for 2 secs for safety
+            for (dummy=0; dummy<40; dummy++)
+                ibc.Sleep(50);  
+
+             // Wait until order actually PreSubmitted - this will prevent submitting another order too quickly
+             //     hopefully stops TWS/IB getting in a knot
+
+            tradetime=GetPerformanceCounter()/1000; 
+            while ((GetPerformanceCounter()/1000 - tradetime) < 5) // give up after 5 seconds
+            {
+                ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                ORderStatus = ibc.GetStatus( OID, True);
+                if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted"|| ORderStatus == "Filled")
+                    break;
+            }
+        }
+    }
+  
+   
+    else if(BuyPending OR SellPending)
+ 
+    {
+				ibc.CancelAllPendingOrders( OID);
+				//ibc.CancelOrder();  
+					
+	}
+
+    // Note LastOrderID will remain "" while waiting for price improvement so we may skip entering for the whole of the bar
+    LastOrderID = StaticVarGetText("OrderID"+ABName);
+    
+
+    ORderStatus = ibc.GetStatus( LastOrderID , True );
+    if( ORderStatus != "" ) StaticVarSetText("OrderStatus"+ABName,ORderStatus);
+
+printf("\nAvg Price"+"\t"+averageprice); 
+printf("\nHolding"+"\t"+ibc.GetPositionSize(Name()));
+
+}
+else IBPosSize = 0;
+ 
+LastOrderID = StaticVarGetText("OrderID"+ABName);
+ORderStatus = StaticVarGetText("OrderStatus"+ABName);
+
+
+Title = Filename+":"+ABName+"\n"+" Trading Mode:"+WriteIf( AutoTrading,"ON"+WriteIf( SubmitOrders," -Create and Transmit"," - Create Only"),"OFF")+"\n"+" Last Signal:          "+WriteIf(LastBuy,"BUY",WriteIf
+(LastShort,"SHORT","NoSignal"))+"\n"+" IB Status:            "+IBcStatusString+"\n"+" Last OrderID:"+LastOrderID+","+"\n"+" OrderStatus:"+ORderStatus+WriteIf(ORderStatus=="Error",ibc.GetLastError( LastOrderID
+),"")+"," + "LastTime:  "+DateTimeToStr(LastValue(DateTime()))+"\n";
+ 
+//AddColumn(sommebuy,"Buy Indicator",1.0,ColorRed);
+//AddColumn(sommesell,"Sell Indicator",1.0,ColorRed);
+//AddColumn(correl, "Correlation", 1.4, IIf( correl>0.9, colorGreen, IIf(correl<-0.5,colorRed,colorBlack )) );
+//AddColumn(ret,"Return",1.2,ColorGreen);
+//AddColumn(C,"Close",1.2,ColorGreen);
+//AddColumn(GapUp(),"GAP Up",1.0,ColorGreen);
+//AddColumn(GapDown(),"GAP Down",1.0,Colorred);
+//AddColumn(IIf(bTCZLong, 76, 83), "UpWard(L)/DnWard(S)-Reversal", formatChar);// L == last long signal S==last sale signal. Consider L only
+//AddTextColumn(sts, "Candle", 1.0, Col, colorDefault,100);
+//AddColumn( IIf( doubletop , 88, 01), "Double TOP", formatChar );
+//AddColumn( IIf( doublebot , 88, 01), "Double BOT", formatChar );
+
+AddColumn(TimeNum(),"Time",1.0);
+AddColumn(CashBalance,"Cash",1.2);
+AddColumn(IIf(AutoTrading,Asc("Y"),Asc("N")),"AT",formatChar);
+AddColumn(IIf(SubmitOrders,Asc("Y"),Asc("N")),"Transmit",formatChar);
+AddColumn(IIf(Buy,Asc("L"),IIf(Short,Asc("S"),Asc(" "))),"L/S",formatChar);
+AddColumn(IIf(Buy,BuyPrice,ShortPrice),"Entry",1.5);
+//AddColumn(averageprice,"AVg. Price",1.5);
+AddTextColumn(IBcStatusString,"IBC Status",1.0);
+AddTextColumn(LastOrderID,"LastOID",1.0);
+AddTextColumn(ORderStatus,"OrderStatus",1.0);
+
+
+
+// 
+// The following code writes all the above AddColumn to permanent logfile, where Filter occurs on last bar 
+//Filter[BarCount-1]
+
+
+if ( OldOrderID == "" && LastOrderID != "")    // No order previously in place for this bar, this execution created one
+{
+	fh = fopen( "TWSTrade.log", "a"); 
+	if( fh ) 
+	{ 
+		fputs( Now(), fh ); 
+		fputs( ", ", fh );
+
+		fputs( "Ticker: ", fh );
+
+		fputs( IBName, fh );
+		fputs( ", ", fh );
+
+		fputs( "BarTime: ", fh );
+		
+		fputs( DateTimeToStr(DT), fh ); 
+		fputs( ", ", fh);
+	
+		qs = StrFormat("Cash: %.2f, ", 
+						CashBalance);
+		fputs( qs, fh ); 
+
+		fputs( "AT: ", fh );
+		if (AutoTrading) fputs( "Y, " , fh );
+		else fputs( "N, " , fh );  
+
+		fputs( "Submit: ", fh );
+		if (SubmitOrders) fputs( "Transmit, " , fh );
+		else fputs( "Create_Only, " , fh );  
+
+		if (LastBuy) fputs( "Buy, ", fh);
+		else if (LastShort) fputs( "Short, ", fh);
+		else fputs( "Not_Valid, ", fh);
+
+		//qs = StrFormat("%.0f, ", IBOrderSize ); 
+		//fputs( qs, fh ); 
+
+		if (LastBuy)
+			qs = StrFormat("Entry: %.5f, ISLARC: %.2f, Stop: %.5f, Profit: %.5f, ", LastBuyPrice,LastBuy);
+		else 
+			qs = StrFormat("Entry: %.5f, ISLARC: %.2f, Stop: %.5f, Profit: %.5f, ",	LastShortPrice, LastShort);
+						
+		fputs( qs, fh ); 
+
+		fputs( "IBC Status: ", fh );
+		fputs( IBCStatusString, fh );
+		fputs( ", ", fh);
+
+		fputs( "LastOID: ", fh );
+		fputs( LastOrderID, fh );
+		fputs( ", ", fh);
+
+		fputs( "OrderStatus: ", fh );
+		fputs( ORderStatus, fh );
+		fputs( ", ", fh);
+
+		if (ORderStatus=="Error")
+			fputs( ibc.GetLastError( LastOrderID ), fh);
+		fputs( ", ", fh);
+
+		fputs( "\n", fh );
+
+		fclose( fh ); 
+	} 
+}
+
+Seconds = int( GetPerformanceCounter()/1000);
+Event =  Seconds%30 == 0 ; 
+if ( Event  ) 
+{
+	Executed =  Nz ( StaticVarGet ( "Executed"));
+	if (!Executed)
+	{
+		ShellExecute("C:\\Program Files\\AmiBroker\\algocode.js", "",""); 
+		StaticVarSet ( "Executed", 1 ); 
+	}
+}
+else
+StaticVarSet ( "Executed", 0); 
+
+RequestTimedRefresh(1); 
+Title = "Event = " + Event + 
+"\n";
+_SECTION_END();
+
