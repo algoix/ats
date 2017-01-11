@@ -1,0 +1,50 @@
+SetBarsRequired( 400, 0 );
+bi = BarIndex();
+
+condition1=MA(C,10)>Ref(MA(C,10),-1);
+condition2=MA(C,30)>MA(C,300)*0.97 AND MA(C,5)<MA(C,30)*1.01;
+condition3=ROC(C,30)<-1.0 AND ROC(C,5)>Ref(ROC(C,5),-1);
+Condition4=RSI(15)<40 AND  MFI(15)<40;
+
+
+condition=condition1 AND condition2 AND condition3 AND condition4;
+conditionB1 = Cross( MACD(), Signal(15,35,5) );
+conditionS1= Cross( Signal(15,35,5), MACD() );
+
+
+listnum = 10; // we use watchlist 10 for storing results
+
+// erase the watchlist when we process very first symbol
+if ( Status( "stocknum" ) == 0 )
+{
+    // retrieve watchlist members
+    oldlist = CategoryGetSymbols( categoryWatchlist, listnum );
+
+    // iterate through the list and remove tickers
+    for ( i = 0; ( sym = StrExtract( oldlist, i ) ) != ""; i++ )
+    {
+        CategoryRemoveSymbol( sym, categoryWatchlist, listnum );
+    }
+}
+
+
+watchlistLSE=InWatchList(3);//
+watchlistUS= InWatchList(0);
+Filter =condition1 AND condition1 AND watchlistLSE;// AND condition1 AND condition2 AND  watchlistcheck ;
+
+//Filter = Buy OR Sell;
+//AddColumn( IIf( Buy, 'B', 'S' ), "Signal", formatChar );
+
+
+AddColumn( condition1, "Condition1", 1.0);
+AddColumn( condition2, "Condition2", 1.0);
+AddColumn( condition3, "Condition3", 1.0);
+AddColumn( condition4, "Condition4", 1.0);
+AddColumn( bi, "BarIndex" );
+AddColumn( ValueWhen( condition1, bi ), "ValueWhen( cond, BarIndex() )" );
+AddColumn( ValueWhen( condition2, Close), "ValueWhen( cond, Close )" );
+
+// check how many times Filter variable was true in the tested range
+// if non-zero value detected, add current symbol to a watchlist
+if ( LastValue( Cum( Filter AND Status( "barinrange" ) ) )  )
+    CategoryAddSymbol( "", categoryWatchlist, listnum );

@@ -1,0 +1,198 @@
+RSI2 = RSI( 2 );
+RSI14=RSI(14);// 80 sell , 20 buy
+EMA200 = EMA( C, 200 );
+/////////*******B*******//Support-Resistance
+SetBarsRequired( 400, 0 );
+bi = BarIndex();
+newPeriod = ND= Day() != Ref( Day(), -1 );
+Time       = Now( 4 );
+Seconds    = int( Time % 100 );
+Minutes    = int( Time / 100 % 100 );
+Hours    = int( Time / 10000 % 100 );
+Index="$NDX";
+P=Foreign(Index,"C",1);
+PH=Foreign(Index,"H",1);
+PL=Foreign(Index,"L",1);
+
+///Technical trend finding
+O1 = Ref(O,-1);O2 = Ref(O,-2);
+	H1 = Ref(H,-1);H2 = Ref(H,-2);
+	L1 = Ref(L,-1);L2 = Ref(L,-2);
+	C1 = Ref(C,-1);C2 = Ref(C,-2);
+
+myroc=ROC(C,12);
+Cond1 = Cross( MACD( 12, 26 ), Signal (12, 26, 9 ) ) AND Cross( StochK( 14, 3 ), StochD( 14, 3, 3 ) ) ;
+Cond2 =RSI(14)>15 AND rsi(2)>15 AND RSI(2)<30 AND  RSI(14)<30 AND  RSIa(P, 14 ) >15 AND RSIa(P,14 )<30  ; //In between band (15,30)
+Cond3=C>EMA( C, 200 ) AND V>MA( V, 50 ) AND Cross(MA(OBV(),5),MA(OBV(),30));
+Cond4 = Cross( PDI(), MDI() )  AND  Cross( PDI(), ADX( 14 ) )  ; 
+Cond5=ROC( Close, 10) > -1 AND ROC( Close, 10)<0;
+Cond6=  CCI(14 ) > MA(CCI(14 ),5) AND CCI(14 )>50 AND CCIa(P,14)>MA(CCIa( P, 14 ),5) AND CCIa(P,14)>50;
+Cond7= ((C>O) AND ((C-O)/(.001+H-L)>.6)) OR  (C>O AND H==C AND O==L) OR  (C>O AND C==H)OR  (C>O AND O==L)  OR ((O1>C1) AND
+(C>O) AND (C>= O1) AND (C1>= O) AND ((C-O)>(O1-C1))) OR GapUp()OR ((O1>C1) AND (C>O) AND (C<= O1) AND (C1<= O) AND ((C-O)<(O1-C1)))
+OR ((O2>C2) AND (C1>O1) AND (C1<= O2) AND (C2<= O1) AND ((C1-O1)<(O2-C2)) AND (C>O) AND (C>C1) AND (O>O1))OR  ((C1<O1) AND
+(((O1+C1)/2)<C) AND (O<C) AND (O<C1) AND (C<O1) AND ((C-O)/(.001+(H-L))>0.6)) ;
+Cond8=(EMA200-C)<HHV(EMA200-C,30)*0.99;
+Buyline1=ValueWhen(Cond1 AND Cond2 AND Cond3 AND Cond4 AND Cond5 AND Cond6 OR Cond7,C);
+Buyline2=ValueWhen(Cond8,C); // sell if this condition breaks 
+SellLIne1= ValueWhen( (O>C AND H==O AND C>L) OR(O>C AND (O-C)/(.001+H-L)>.6) OR (O>C AND (H==O AND
+C==L) OR (O>C AND C==L)OR( C>O AND C==H)OR(((H-L)>4*(O-C)) AND ((H-C)/(.001+H-L)>= 0.75) AND ((H-O)/(.001+H-L))>= 0.75)),C); 
+
+//Filtering condition
+ZZPercent=0.6;
+ZZ=Zig(C,ZZPercent);
+ZZbottom=(ZZ<Ref(ZZ,-1)) AND (ZZ<Ref(ZZ,1));
+ZZtop=(ZZ>Ref(ZZ,-1)) AND (ZZ>Ref(ZZ,1));
+percdiff = 0.6; /* peak detection threshold */
+fwdcheck = 1;
+PK= Peak( H, percdiff, 1 ) == High;
+TR= Trough( L, percdiff, 1 ) == Low;
+mindistance = 0.1;
+validdiff = percdiff/10;
+xTr1 = ValueWhen( Tr, L, 1 );
+xTr2 = ValueWhen( Tr, L, 2 );
+xTr3 = ValueWhen( Tr, L, 3 );
+xTr4 = ValueWhen( Tr, L, 4 );
+xPK1=ValueWhen(PK,H,1);
+xPK2=ValueWhen(PK,H,2);
+xPK3=ValueWhen(PK,H,3);
+xPK4=ValueWhen(PK,H,4);
+valB=valuewhen(ZZbottom,C,1);
+valT=valuewhen(ZZtop,C,1);
+val=valuewhen(ZZbottom,C,1);
+peakdiff = (ValueWhen( PK, H, 1 )/ValueWhen( PK, H, 2 )+ValueWhen( PK, H, 2 )/ValueWhen( PK, H, 3 )+ValueWhen( PK, H, 3 )/ValueWhen( PK, H, 4 ))/3;
+Troughdiff=(ValueWhen( tr, L, 1 )/ValueWhen( tr, L, 2 )+ValueWhen( tr, L, 2 )/ValueWhen( tr, L, 3 )+ValueWhen( tr, L, 3 )/ValueWhen( tr, L, 4 ))/3;
+downup=IIf(xTr1>xTr2 and C>xTr1 AND xTr2<valB,1,0);
+topdown=iif(xPK1<xPK2 and C<xPK1 AND xPK2>valT,1,0);
+doubleTop = PK AND abs( peakdiff - 1 ) < validdiff AND (Xpk1 -Xpk2)>mindistance AND High > HHV( Ref( H, fwdcheck ), fwdcheck - 1 );
+doubleBot=tr AND abs( troughdiff - 1 ) < validdiff AND (Xtr1 -Xtr2)>mindistance AND Low < LLV( Ref( L, fwdcheck ), fwdcheck - 1 );
+buyline3= ValueWhen(C<xTr2*1.015 AND C<val*1.02 AND xTr1<xTr2*1.01 AND downup AND !GapDown(),C);
+buyline4= ValueWhen(C<xPK2*0.99 AND C<valT*0.99 AND xPK1<xPK2*0.99 AND C>valB*1.01 AND topdown,C);
+
+//// 
+UPB3 = H <= Ref(H,-1) AND Ref(H,-1) <= Ref(H,-2) AND Ref(H,-2) <= Ref(H, -3);
+UPB4 = UPB3 AND Ref(H,-3) <= Ref(H,-4);
+UPB5 = UPB4 AND Ref(H,-4) <= Ref(H,-5);
+UPB6 = UPB5 AND Ref(H,-5) <= Ref(H,-6);
+UPB7 = UPB6 AND Ref(H,-6) <= Ref(H,-7);
+DPB3 = L >= Ref(L,-1) AND Ref(L,-1) >= Ref(L,-2) AND Ref(L,-2) >= Ref(L, -3);
+DPB4 = DPB3 AND Ref(L,-3) >= Ref(L,-4);
+DPB5 = DPB4 AND Ref(L,-4) >= Ref(L,-5);
+DPB6 = DPB5 AND Ref(L,-5) >= Ref(L,-6);
+DPB7 = DPB6 AND Ref(L,-6) >= Ref(L,-7);
+
+NewHighs   = IIf(HHV(H,5) >= HHV(H,40), 1, 0);
+NewLows    = LLV(L,5) <= LLV(L,40);
+
+BullishMAs = IIf(MA(C,10) >= EMA(C,20) AND EMA(C,20) >= EMA(C,30), 1, 0);
+BearishMAs = IIf(MA(C,10) <= EMA(C,20) AND EMA(C,20) <= EMA(C,30), 1, 0);
+
+BSign = IIf( (UPB3 OR UPB4 OR UPB5 OR UPB6 OR UPB7) AND NewHighs AND BullishMAs, 1, 0); 
+BSP=ValueWhen(Bsign,C);
+BStop = IIf(BSign == 1, H + .125, 0); // "HIgh"
+SSign = IIf( (DPB3 OR DPB4 OR DPB5 OR DPB6 OR DPB7) AND NewLows AND BearishMAs, 1, 0); 
+SSP=ValueWhen(Ssign,C);
+SStop = IIf(SSign == 1, L - .125, 0); // "low"
+///
+periods =15;
+Percent = 5;
+DaysBack = 0; 
+RABars = 0; //initialize
+TotalBars = cum(1); //how many bars in database
+FinalBar = lastvalue(TotalBars);//number value of last bar
+EndDay = FinalBar - DaysBack;//for other than 0 DaysBack
+StartDay = EndDay - periods+1;//starting point for line
+Master1 = iif(TotalBars >= StartDay and TotalBars <= EndDay,1,0);//defined period
+RABars = iif(Master1,ref(RABars,-1)+1,0); // daily counter in defined period
+RABarKntr = iif(Master1,sum(RABars,periods),0); //Sum of daily counts
+/*  Regression Analysis Computations  */
+TempMeanX = iif(RABarKntr == periods,sum(RABarKntr,periods),0);  // Sum of individual day counters
+MeanX1 = hhv(TempMeanX,TotalBars)/periods;  //  Final number divided by number of days
+MeanX = lastvalue(MeanX1); 
+TempMeanY =  iif(RABarKntr == periods, sum(c,periods),0);
+MeanY1 = hhv(TempMeanY,TotalBars)/periods ;  //  Final sum  divided by number of days
+MeanY = lastvalue(MeanY1);  
+Slope1 = iif(TotalBars == EndDay,linregslope(c,periods),0);
+Slope2 = iif(hhv(Slope1,FinalBar)>=0,hhv(slope1,FinalBar),llv(Slope1,FinalBar));
+slope = lastvalue(Slope2);
+Intercept = MeanY -Slope * MeanX;
+/*  Linear Regression Line = Intercept plus the Slope times RABarKntr  */
+LRLine = Intercept + Slope * RABarKntr; 
+LRP=ValueWhen(LRLine,C);
+
+///////////************B***********////Volume profile
+
+//volatility
+
+//beta and correlation 
+///Volume, volatility AND beta are in Code B( Buy )
+
+
+listnumB = 10; // we use watchlist 10 for storing buy stocks
+
+// erase the watchlist when we process very first symbol
+if ( Status( "stocknum" ) == 0 )
+{
+    // retrieve watchlist members
+    oldlist = CategoryGetSymbols( categoryWatchlist, listnumB);
+
+    // iterate through the list and remove tickers
+    for ( i = 0; ( sym = StrExtract( oldlist, i ) ) != ""; i++ )
+    {
+        CategoryRemoveSymbol( sym, categoryWatchlist, listnumB );
+    }
+}
+
+listnumS = 11; // we use watchlist 11 for storing sell stocks
+
+// erase the watchlist when we process very first symbol
+if ( Status( "stocknum" ) == 0 )
+{
+    // retrieve watchlist members
+    oldlist = CategoryGetSymbols( categoryWatchlist, listnumS);
+
+    // iterate through the list and remove tickers
+    for ( i = 0; ( sym = StrExtract( oldlist, i ) ) != ""; i++ )
+    {
+        CategoryRemoveSymbol( sym, categoryWatchlist, listnumS );
+    }
+}
+
+B1=C>(Buyline1+Buyline2)/2;
+B2=C>Buyline4 AND C<Buyline3;
+B3=C>(xTr1+0.01) AND C<(xPK1+0.1) AND P<((Peak( PH, 0.3, 1 )+Peak( PH, 0.3,2))/2)*1.007 AND P>((Trough( PL, 0.3, 1 )+Trough( PL, 0.3, 2 ))/2)*1.005 AND !GapDown();
+S1=SellLIne1 OR SSP;
+S2=C<xTr2 ;
+S3= C<ValueWhen(B1,C);
+buysig=(B1 or B2 OR B3);
+sellsig=( S1 and S2 AND S3) ;
+FilterB=buysig AND InWatchList(4) AND Hold( buysig, 5);
+FilterS=sellsig AND InWatchList(6) AND Hold( sellsig, 5);
+Range = 10;
+Filter=(FilterB+FilterS)==1;
+AddColumn(C,"Price",1.2);
+AddColumn(FilterB,"Stocks-Buy",1.2);
+AddColumn(FilterS,"Stocks-Sell",1.2);
+AddColumn(ValueWhen(buysig,c),"buysig",1.2);//sell below this level
+AddColumn(ValueWhen(sellsig,c),"sellsig",1.2);//sell below this level
+AddColumn(P,"Index",1.2,ColorGreen);
+AddColumn(((Peak( PH, 0.3, 1 )+Peak( PH, 0.3, 2))/2)*1.007,"H",1.2,ColorGreen);
+AddColumn(((Trough( PL, 0.3, 1 )+Trough( PL, 0.3, 2 ))/2)*1.005,"L",1.2,ColorGreen);
+//AddColumn(SELLSIG,"Sell-Indicator",1.2,ColorGreen);
+
+AddColumn(peakdiff,"peakdiff",1.2,ColorGreen);
+AddColumn(Troughdiff,"Troughdiff",1.2,ColorGreen);
+
+
+if ( LastValue( Cum( FilterB AND Status( "barinrange" ) ) )  )
+    CategoryAddSymbol( "", categoryWatchlist, listnumB );
+    
+if ( LastValue( Cum( FilterS AND Status( "barinrange" ) ) )  )
+    CategoryAddSymbol( "", categoryWatchlist, listnumS );
+
+
+
+
+
+
+
+

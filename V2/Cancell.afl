@@ -1,0 +1,46 @@
+_SECTION_BEGIN("Strategy-Cancell");
+AutoTradingParam = True;        
+SubmitOrders = True;            
+Tracing = False;
+MarketStart=093000;
+MarketOpen = 094500;//09:30:00;
+MarketClose =151500;//04:00:00 
+MarketEnd=160000;
+LM=155500;
+MarketON = TimeNum() >= MarketOpen AND Now( 4 ) < MarketClose;
+ABName=getfndata("Alias");
+IBName =getfndata("Alias");
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+if( IsNull( AutoTrading ) ) StaticVarSet("AutoTrading"+ABName,0);
+if ( AutoTrading==0 && AutoTradingParam )  StaticVarSetText("OrderID"+ABName,"");
+if ( AutoTrading && AutoTradingParam==0 )  StaticVarSetText("OrderID"+ABName,"");
+if (AutoTradingParam) StaticVarSet("AutoTrading"+ABName,1);
+else  StaticVarSet("AutoTrading"+ABName,0);
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+Filename 	= _DEFAULT_NAME();
+/////EXTRA STRATEGIES
+
+
+	
+/////// Cancell Code
+IBPosSize=0;
+
+ibc = GetTradingInterface("IB");
+IBcStatus = ibc.IsConnected();
+
+// Work out how much money there is and adjust risk size
+
+
+if( IBcStatus AND LastValue(MarketON))
+{
+     
+   
+
+	ibc.CancelAllPendingOrders();
+   
+    
+   
+}
+else IBPosSize = 0;
+ 
+

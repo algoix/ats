@@ -1,0 +1,917 @@
+_SECTION_BEGIN("Strategy-Cancell");
+AutoTradingParam = True;        
+SubmitOrders = True;            
+Tracing = False;
+MarketStart=093000;
+MarketOpen = 094500;//09:30:00;
+MarketClose =151500;//04:00:00 
+MarketEnd=160000;
+LM=155500;
+MarketON = TimeNum() >= MarketOpen AND Now( 4 ) < MarketClose;
+MarketOFF = Now( 4 ) >= MarketClose ;//day's over*/
+SellOn=(TimeNum() >= MarketStart AND Now( 4 ) < MarketOpen) OR (Now( 4 ) >=MarketClose AND Now( 4 )<MarketEnd);
+SellOff=Now( 4 ) >= MarketEnd ;
+MarketLM=Now( 4 ) >=LM AND Now( 4 )<MarketEnd;
+ABName=getfndata("Alias");
+IBName =getfndata("Alias");
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+if( IsNull( AutoTrading ) ) StaticVarSet("AutoTrading"+ABName,0);
+if ( AutoTrading==0 && AutoTradingParam )  StaticVarSetText("OrderID"+ABName,"");
+if ( AutoTrading && AutoTradingParam==0 )  StaticVarSetText("OrderID"+ABName,"");
+if (AutoTradingParam) StaticVarSet("AutoTrading"+ABName,1);
+else  StaticVarSet("AutoTrading"+ABName,0);
+AutoTrading = StaticVarGet("AutoTrading"+ABName);
+Filename 	= _DEFAULT_NAME();
+///Strategies/////////
+/////1. Candle Based/////////////////////////////////////////////////////////////////////
+SL = ( HHV( H, 26 ) + LLV( L, 26) )/2;// standard, base, or kijun-sen line
+TL = ( HHV( H, 9 ) + LLV( L, 9 ) )/2;// turning, conversion, or tenkan-sen line
+DL = Ref( C, 25 );						// delayed close price, or chikou span
+Span1 = Ref( ( SL + TL )/2, -25 );		//Span1 and Span2 define the clouds
+Span2 = Ref( (HHV( H, 52) + LLV(L, 52))/2, -25);
+above = IIf(TL>Span1 AND TL>Span2,1,0);
+within = IIf((TL>Span1 AND TL<Span2) OR (TL<Span1 AND TL>Span2) ,1,0);
+below = IIf(TL<Span1 AND TL<Span2,1,0);
+//ICHIMOKU=IIf((Cross(TL,SL) AND above),"STRONGbuy",IIf((Cross(TL,SL) AND within),"MEDIUMbuy",IIf((Cross(TL,SL) AND below),"WEAKbuy",IIf((Cross(SL,TL) AND below),"STRONGsell",IIf((Cross(SL,TL) AND within),"MEDIUMsell",IIf((Cross(SL,TL) AND above),"WEAKsell",0))))));
+ICHIMOKUbuy=IIf((Cross(TL,SL) AND above),3,IIf((Cross(TL,SL) AND within),2,IIf((Cross(TL,SL) AND below),1,0)));
+ICHIMOKUsell=IIf((Cross(SL,TL) AND below),3,IIf((Cross(SL,TL) AND within),2,IIf((Cross(SL,TL) AND above),1,0)));
+/* Candle Codes */
+len=15;
+VolumeIdx = V / MA( V, len );
+AvgRange = Sum( abs(O-C),len )/len;
+White = IIf((C>O) AND ((C-O)>=0.8*(H-L)),1,0) AND (C-O)>AvgRange;
+Black = IIf((C<O) AND ((O-C)>=0.8*(H-L)),1,0) AND (O-C)>AvgRange;
+Doji  = IIf(abs(O-C)<=0.1*(H-L),1,0);
+/* Dark Cloud Cover [Bear] */
+DCC = IIf(Ref(White, -1) AND Black AND C<=Ref(((H+L)/2),-1) AND O>Ref(C,-1), 1,0);
+/* Piercing Line [Bull] */
+PL = IIf(Ref(Black, -1) AND White AND C>=Ref(((H+L)/2),-1) 	AND O<Ref(C,-1), 1,0);
+/* Evening Doji Star [Bear] */
+EDS = IIf(Ref(White, -2) AND Ref(Doji, -1) AND Black AND 	C<=Ref(((H+L)/2),-2), 1,0);
+/* Morning Doji Star [Bull] */
+MDS = IIf(Ref(Black, -2) AND Ref(Doji, -1) AND White AND 	C>=Ref(((H+L)/2),-2), 1,0);
+/* Hammer [Bull] */
+HAM = IIf( (H-L > 1.5*AvgRange) AND (C > (H+L)/2)  AND (O > C) AND 	(VolumeIdx > 2), 1, 0);
+/* Bearish Engulfing */
+BRE = IIf(Black AND Ref(White, -1) AND (C < Ref(O, -1))  AND (O > Ref(C, -1)), 1,0);
+/* Bullish Engulfing */
+BLE = IIf(White AND Ref(Black, -1) AND (C > Ref(O,-1))  AND (O < Ref(C,-1)), 1,0);
+//34//
+//###########################################
+WhiteBody = C > O;
+BigWhite = (Close - Open)/Open > 0.015 AND (Close - Open) * 2 > High - Low;
+BlackBody = C < O;
+BigBlack = (Open - Close)/Open > 0.015 AND (Open - Close) * 2 > High - Low;
+Big = abs((Close - Open)/Open) > 0.014;
+LongUpperShadow = H - Max(O,C) > (H - L)*0.67;
+LongLowerShadow = Min(O,C) - L > (H - L)*0.67;
+rng = abs((C-O)/O);
+lowerShadow = Min(O,C) - L;
+uppershadow = H - Max(O,C);
+body = abs(O-C);
+rngx = abs(H - L);
+rngy = H-L;
+shaven = lowerShadow < rngy*0.1;
+ShavenBottom = L == Min(O,C);
+ShavenHead = H == Max(O,C);
+prevSize = abs(Ref(O,-1)-Ref(C,-1));
+currentSize = abs(O-C);
+fwh = Ref(H,-4);
+fwl = Ref(L,-4); 
+isPrevLargeWhite = Ref(big,-1) AND Ref(whitebody,-1);
+SmallRealBody = rng < 0.003 AND rng >0;   
+Diff = abs((prevSize - currentSize) / currentSize);
+DownTrend = (H < Ref(H,-1) AND L < Ref(L,-1));
+UpTrend = (H > Ref(H,-1) AND L > Ref(L,-1));
+isPrevUpTrend = Ref(uptrend,-1);
+RealBodyGapUp = Min(O,C) > Max(Ref(O,-1),Ref(C,-1));
+RealBodyGapDown = Max(O,C) < Min(Ref(O,-1),Ref(C,-1));
+FallingWindow = Ref(downtrend,-1) AND GapDown();
+RisingWindow = Ref(uptrend,-1) AND GapUp();
+isfalling = bigblack AND fallingwindow;
+isrising = bigwhite AND risingwindow;
+rwh = Ref(H,-4);
+rwl = Ref(L,-4);
+isFallingBlack = Ref(fallingwindow,-1) AND Ref(blackbody,-1);
+horw = Ref(H,-2); 
+windowOpen = C < horw;
+opensInside = O < Ref(O,-1) AND O > Ref(C,-1);
+similarSize = diff <= 0.25;
+GapUpFromWhite = realBodyGapUp AND isPrevLargeWhite AND isPrevUptrend;
+isPrevLargeBlack = Ref(big,-1) AND Ref(blackbody,-1);
+isPrevDownTrend = Ref(downtrend,-1);
+GapDownFromBlack = realBodyGapDown AND isPrevLargeBlack AND isPrevDowntrend;
+isRisingWhite = Ref(risingwindow,-1) AND Ref(whitebody,-1);
+lorw = Ref(L,-2);
+windowOpenx = C > lorw;
+Doji = C == O AND V > 0;
+LongLeggedDoji = doji AND (H - L)/L > 0.01;
+StarUp = smallRealBody AND gapUpFromWhite;
+DojiStarUp = doji AND gapUpFromWhite;
+DojiStarDown = doji AND gapDownFromBlack;
+StarDown = smallRealBody AND gapDownFromBlack;
+isPrevDownTrendx = Ref(downtrend,-3);
+firstDoji = Ref(doji,-2); 
+secDojiLower = Ref(doji,-1) AND Ref(realBodyGapDown,-1);
+isPrevUpTrendx = Ref(uptrend,-3);
+secDojiHigher = Ref(doji,-1) AND Ref(realBodyGapUp,-1);
+BeltHold = shavenbottom AND shavenhead AND big;
+Engulfing = Max(O,C) > Ref(Max(O,C),-1) AND Min(O,C) < Ref(Min(O,C),-1);
+UmbrellaLine = uppershadow < rngx*0.1 AND lowershadow > body*2; 
+//====================================================================================================
+//----------------------------------------
+// Bearish
+//----------------------------------------
+ 
+// Kicker
+KBR = Ref(O,-1) < Ref(C,-1) AND O <= Ref(O,-1) AND C <= O;
+ 
+//Evening Doji Star
+EveningDojiStar = Ref(dojiStarUp,-1) AND blackbody AND big AND C < Ref((O + C)/2,-2);
+/*
+A large white candlestick followed by a doji that gaps up from the
+previous candles real body. This is followed by a third candlestick that is black and has a
+close lower than the half way point of the first candlesticks real body. Must be preceeded by an uptrend.
+*/
+
+// Evening Star
+EveningStar = Ref(starUp,-1) AND blackbody AND big AND C < Ref((O + C)/2,-2);
+/*
+A large white candlestick followed by a small real body of either colour that gaps up from the
+previous candles real body. This is followed by a third candlestick that is black and has a
+close lower than the half way point of the first candlesticks real body. Must be preceeded by an uptrend.
+*/
+ 
+// Grave Stone Doji
+GraveStoneDoji = longleggeddoji AND L == C AND Ref(uptrend,-1);
+/*
+A doji with no lower shadow and an extremenly long upper shadow. Must be preceeded by an uptrend.
+*/
+ 
+//Bear 3 Formation
+Bear3Formation = bigblack AND C < Ref(C,-4) AND
+Ref(H,-1) <= fwh AND Ref(L,-1) >= fwl AND
+Ref(H,-2) <= fwh AND Ref(L,-2) >= fwl AND
+Ref(H,-3) <= fwh AND Ref(L,-3) >= fwl AND
+Ref(isfalling, -4);
+/*A strong black candle in a falling window, followed by three
+ candles that fall within the high/low range of the strong black candle, followed
+ by another strong black candle that closes below the close of the first black candle. 
+ This is a bearish confirmation.*/
+ 
+//Bearish Abandoned Baby
+BearishAbandonedBaby = EveningDojiStar AND Ref(GapUp(),-1) AND GapDown();
+/*
+An evening doji star where there is a gap between the lower shadow of the doji and
+the upper shadows of the prior and next candle.
+*/
+ 
+//Bearish Belt Hold
+BearishBeltHold = belthold AND blackbody AND Ref(uptrend,-1);
+/*
+A large black candle with a shaven head and bottom preceeded by an uptrend.
+*/
+ 
+//Bearish Counter Attack
+BearishCounterAttack = Ref(big AND whitebody,-1) AND O > Ref(H,-1) AND C == Ref(C,-1) AND big AND blackbody AND Ref(uptrend,-1);
+/*
+A large white candle followed by a black candle which opens sharply higher but closes
+at the prior black candles close. Must be preceeded by an uptrend.
+*/
+ 
+// Bearish Harami Cross
+BearishHaramiCross = doji AND Ref(C,-1) > O AND Ref(O,-1) < O AND Ref(big AND whitebody,-1) AND Ref(uptrend,-1);
+/* A doji preceded by and contained within the real body of a big white candlestick in an uptrend */
+ 
+// Bearish Harami
+BearishHarami = Ref(big AND whitebody,-1) AND smallRealBody AND Min(O,C) > Ref(O,-1) AND Max(O,C) < Ref(C,-1) AND Ref(uptrend,-1);
+/* A small candlestick preceded by and whose real body is contained within, the real body of a big white candlestick in an uptrend*/
+ 
+// Bearish Separating Line
+BearishSeparatingLine = Ref(whitebody AND big,-1) AND blackbody AND big AND O == Ref(O,-1) AND Ref(downtrend,-1); 
+/* A white candlestick followed by a black candlestick with the same opening price. Continues  the previous downtrend. */
+ 
+// Dark Cloud Cover
+DarkCloudCover = Ref(bigwhite,-1) AND blackbody AND O > Ref(H,-1) AND C <= Ref((O+C)/2,-1) AND C > Ref(O,-1) AND Ref(uptrend,-1);
+/* A strong white candle in an uptrend followed by a black candle that opens above the high of the  white candle and closes at least 50 percent into the white candles real body. Note that if the black candle completely
+engulfs the white candles real body then this is not Dark Cloud Cover but a Bearish Engulfing Pattern. */
+ 
+ 
+// Engulfing Bear
+EngulfingBear = Ref(whitebody,-1) AND blackbody AND engulfing AND Ref(uptrend,-1);
+/* This bar is black and its real body engulfs the previous bars white real body. Must be preceeded by an uptrend.
+*/
+ 
+//Hamging Man
+HangingMan = umbrellaline AND uptrend AND Ref(uptrend,-1);
+/* The same as a hammer except must be preceeded by an uptrend. */
+ 
+//Shooting Star
+ShootingStar = smallRealBody AND shaven AND realBodyGapUp AND longuppershadow AND Ref(uptrend,-1);
+/*
+A small body that closes near the bottom of its range and 
+has a long upper shadow. There must be a real body gap up from the previous sessions candle. This
+pattern occurs only after an uptrend.
+*/
+ 
+//Three Black Crows
+ThreeBlackCrows = (big AND blackbody) AND Ref(big AND blackbody, -1) AND Ref(big AND blackbody, -2) AND O < Ref(O,-1) AND Ref(O,-1) < Ref(O,-2) AND Ref(uptrend,-4);
+/*
+The last three candlesticks are large and black. Each opens within or lower than the 
+ previous candles real body.Must be preceeded by an uptrend.
+*/
+ 
+// Tri-Star Bottom
+TriStarBottom = firstDoji AND secDojiLower AND doji AND realBodyGapUp AND isPrevDownTrendx;
+/*
+A doji followed by a lower doji which is followed by another doji that is higher than the
+second doji. Must be preceeded by a downtrend.
+*/
+ 
+//Tweezer Tops
+TweezerTops = H == Ref(H,-1) AND Ref(big AND whitebody,-1) AND Ref(uptrend,-2);
+/* A large candle followed by a candle with the same high. Must be preceeded by an uptrend. */
+ 
+// Upside Gap Two Crows
+UpsideGapTwoCrows = Ref(big AND whitebody,-2) AND Ref(realBodyGapUp,-1) AND Ref(smallRealBody,-1) AND Ref(blackbody,-1) AND engulfing AND blackbody AND C > Ref((O+C)/2,-2) AND Ref(uptrend,-2);
+/* A strong white candle followed by a small black candle which gaps above the previous 
+candles real body, followed by a black candle which engulfs the previous black candle. Preceeded by an uptrend. */
+ 
+//----------------------------------------
+// Bullish
+//----------------------------------------
+ 
+// Kicker
+KBL = Ref(O,-1) > Ref(C,-1) AND O >= Ref(O,-1) AND C > O; 
+ 
+// Morning Star
+MorningStar = Ref(starDown,-1) AND whitebody AND big AND C > Ref((O + C)/2,-2);
+/*
+A large black candlestick followed by a small real body of either colour,
+ that gaps below the previous black candles real body, with a third white candlestick, that has a close 
+ higher than the half way point of the first black candlestick. Must be preceeded by a downtrend.
+*/
+ 
+// Morning Doji Star
+MorningDojiStar = Ref(dojiStarDown,-1) AND whitebody AND big AND C > Ref((O + C)/2,-2);
+/*
+A large black candlestick followed by a doji that gaps below its real body, with a third
+ white candlestick, that has a close at least half of the way up the black candlestick. Must be preceeded by a
+ downtrend.
+*/
+ 
+// Bull 3 Formation
+Bull3Formation = bigwhite AND C > Ref(C,-4) AND
+Ref(H,-1) <= rwh AND Ref(L,-1) >= rwl AND
+Ref(H,-2) <= rwh AND Ref(L,-2) >= rwl AND
+Ref(H,-3) <= rwh AND Ref(L,-3) >= rwl AND
+Ref(isrising, -4);
+/*
+A strong white candle in a rising window, followed by three 
+ candles that fall within the high/low range of the strong white candle, followed
+ by another strong white candle that closes above the close of the first white candle. 
+ This is confirmation of the Bullish trend."
+*/
+ 
+// Bullish Abandoned Baby
+BullishAbandonedBaby = morningdojistar AND Ref(GapDown(),-1) AND GapUp();
+/*
+A morning doji star where there is a gap between the lower shadow of the doji and
+the prior and next candle.
+*/
+// Bullish Belt Hold
+BullishBeltHold = belthold AND whitebody AND Ref(downtrend,-1);
+/*
+A large white candle with no upper or lower shadow preceeded by a downtrend.
+*/
+ 
+// Bullish Counter Attack
+BullishCounterAttack = Ref(big AND blackbody,-1) AND O < Ref(H,-1) AND C == Ref(C,-1) AND big AND whitebody AND Ref(downtrend,-1);
+/*
+A large black candle followed by a white candle which opens sharply lower but closes at the 
+prior white candles close. Must be preceeded by a downtrend
+*/
+ 
+// Bullish Harami Cross
+BullishHaramiCross = doji AND Ref(O,-1) > O AND Ref(C,-1) < O AND Ref(big AND blackbody,-1) AND Ref(downtrend,-1);
+/*
+A doji preceded by and contained within the real body of a big 
+black candlestick in a downtrend.
+*/
+ 
+// Bullish Harami
+BullishHarami = Ref(big AND blackbody,-1) AND smallRealBody AND Min(O,C) > Ref(C,-1) AND Max(O,C) < Ref(O,-1) AND Ref(downtrend,-1);
+/*
+A small candlestick, preceded by, and whose body is contained within a big black 
+candlestick in a downtrend
+*/
+ 
+// Bullish Separating Line
+BullishSeparatingLine = Ref(blackbody AND big,-1) AND whitebody AND big AND O == Ref(O,-1) AND Ref(uptrend,-1);
+/*
+A black candlestick followed by a white candlestick with the same opening price. Continues
+ the previous uptrend.
+*/
+ 
+//Dragonfly Doji
+DragonflyDoji = longleggeddoji AND H==C AND Ref(downtrend,-1);
+/*A doji with no upper shadow AND a long lower shadow preceeded by a downtrend.*/
+ 
+// Engulfing Bull
+EngulfingBull = Ref(blackbody,-1) AND whitebody AND engulfing AND Ref(downtrend,-1);
+/*
+This bar is white and its real body engulfs the previous bars black real body. Must be
+preceeded by a downtrend.
+*/
+ 
+// Hammer
+Hammer = umbrellaline AND Ref(downtrend,-1);
+/*
+The upper shadow is less than ten percent of the range
+ and the lower shadow is more than two times the size of the body. Must be preceeded by a downtrend.
+*/
+ 
+//Inverted Hammer
+InvertedHammer = smallRealBody AND shaven AND realBodyGapDown AND longuppershadow AND Ref(downtrend,-1);
+/*
+An upside down Hammer that appears after a downtrend
+*/
+ 
+//Piercing Line
+PiercingLine = Ref(bigblack,-1) AND whitebody AND O < Ref(L,-1) AND C >= Ref((O+C)/2,-1) AND C < Ref(O,-1) AND Ref(downtrend,-1);
+/*
+A stong black candle followed by a white candle that opens below the low of
+the prior black candle but closes more than halfway into the black candles real body. Preceeded by a downtrend. Note that if the
+white candle engulfs the prior black candles real body then this is a Bullish Engulfing Pattern not a Piercing Pattern
+*/
+ 
+// SeperatingLines
+SeperatingLines = O == Ref(O,-1) AND (blackbody AND Ref(whitebody,-1) OR whitebody AND Ref(blackbody,-1));
+/*
+a black candlestick is followed by a white candlestick, or a white with a black,and they have the same opening prices.
+*/
+ 
+//Three White Soldiers
+ThreeWhiteSoldiers = (whitebody AND big) AND Ref(whitebody AND big,-1) AND Ref(whitebody AND big,-2) AND O > Ref(O,-1) AND Ref(O,-1) > Ref(O,-2);
+/*
+The last three candlesticks are large and white. Each opens within or higher than the 
+ previous candles real body.
+*/
+ 
+// Tri-Star Top
+TriStarTop = firstDoji AND secDojiHigher AND doji AND realBodyGapDown AND isPrevUpTrendx;
+/*
+A doji followed by a higher doji which is followed by another doji that is lower than the
+second doji. Must be preceeded by an uptrend.
+*/
+ 
+// Tweezer Bottoms
+TweezerBottoms = L == Ref(L,-1) AND Ref(big AND blackbody,-1) AND Ref(downtrend,-2);
+/* A large candle followed by a candle with the same Low. Must be preceeded by a downtrend. */
+ 
+ 
+//----------------------------------------
+// Continuation
+//----------------------------------------
+ 
+// Downward Gapping Tasuki
+DownwardGappingTasuki = isFallingBlack AND whitebody AND opensInside AND C > Ref(O,-1) AND windowOpen AND similarSize;
+/* A black candle that gaps down followed by a similarly sized white candle that opens Inside the black candles real body AND closes above it. */
+ 
+//Upward Gapping Tasuki
+UpwardGappingTasuki = isRisingWhite AND blackbody AND opensInside AND C < Ref(O,-1) AND  windowOpenx AND similarSize;
+/* A white candle that gaps up followed by a similarly sized black candle that opens Inside the white candles real body AND closes below it; */
+ 
+//Inverted Black Hammer
+InvertedBlackHammer = blackbody AND InvertedHammer;
+ 
+ 
+STS = /*Bears*/
+WriteIf(KBR, "Bearish Kicker", 
+WriteIf(EveningDojiStar, "Evening Doji Star", 
+WriteIf(EveningStar, "Evening Star",
+WriteIf(GraveStoneDoji, "Grave Stone Doji",
+WriteIf(Bear3Formation, "Bear 3 Formation",
+WriteIf(BearishAbandonedBaby, "Bearish Abandoned Baby",
+WriteIf(BearishBeltHold, "Bearish Belt Hold",
+WriteIf(BearishCounterAttack, "Bearish Counter Attack",
+WriteIf(BearishHaramiCross, "Bearish Harami Cross",
+WriteIf(BearishHarami, "Bearish Harami",
+WriteIf(BearishSeparatingLine, "BearishSeparatingLine",
+WriteIf(DarkCloudCover, "DarkCloudCover",
+WriteIf(EngulfingBear, "Engulfing Bear",
+WriteIf(HangingMan, "Hanging Man",
+WriteIf(ShootingStar, "Shooting Star",
+WriteIf(ThreeBlackCrows, "Three Black Crows",
+WriteIf(TriStarBottom, "TriStar Bottom",
+WriteIf(TweezerTops, "Tweezer Tops",
+WriteIf(UpsideGapTwoCrows, "UpsideGapTwoCrows", 
+/*Bulls*/
+WriteIf(KBL, "Bullish Kicker",
+WriteIf(MorningStar, "Morning Star",
+WriteIf(MorningDojiStar, "Morning Doji Star",
+WriteIf(Bull3Formation, "Bull 3 Formation",
+WriteIf(BullishAbandonedBaby, "Bullish Abandoned Baby",
+WriteIf(BullishBeltHold, "Bullish Belt Hold",
+WriteIf(BullishCounterAttack, "Bullish Counter Attack",
+WriteIf(BullishHaramiCross, "Bullish Harami Cross",
+WriteIf(BullishHarami, "Bullish Harami",
+WriteIf(BullishSeparatingLine, "Bullish Separating Line",
+WriteIf(DragonflyDoji, "Dragonfly Doji",
+WriteIf(EngulfingBull, "Engulfing Bull",
+WriteIf(Hammer, "Hammer",
+WriteIf(InvertedHammer, "Inverted Hammer",
+WriteIf(PiercingLine, "Piercing Line",
+WriteIf(SeperatingLines, "Seperating Lines",
+WriteIf(ThreeWhiteSoldiers, "Three White Soldiers",
+WriteIf(TriStarTop, "Tri-Star Top",
+WriteIf(TweezerBottoms, "Tweezer Bottoms",""))))))))))))))))))))))))))))))))))))));
+ 
+     
+candlesell =   IIf(KBR OR EveningDojiStar OR EveningStar OR GraveStoneDoji OR Bear3Formation OR BearishAbandonedBaby
+        OR BearishBeltHold OR BearishCounterAttack OR BearishHaramiCross OR BearishHarami OR BearishSeparatingLine
+        OR DarkCloudCover OR EngulfingBear OR HangingMan OR ShootingStar OR ThreeBlackCrows OR TriStarBottom 
+        OR TweezerTops OR UpsideGapTwoCrows,3,0);//weight 2
+candlebuy=IIf( MorningStar OR MorningDojiStar OR Bull3Formation
+        OR BullishAbandonedBaby OR BullishBeltHold OR BullishCounterAttack OR BullishHaramiCross
+        OR BullishHarami OR BullishSeparatingLine OR DragonflyDoji OR EngulfingBull OR Hammer OR InvertedHammer
+        OR PiercingLine OR SeperatingLines OR ThreeWhiteSoldiers OR TriStarTop OR TweezerBottoms OR KBL, 3, 0);
+        
+candleAbuy=ICHIMOKUbuy+candlebuy; //Max value 6 and min 0
+candleAsell=ICHIMOKUsell+candlesell;
+/////own Indicators /////////
+CPRbuy=O<(L+0.2*(H-L)) AND C>(H-0.2*(H-L)) AND H<ref(H,-1) AND L<ref(L,-1) AND C>ref(C,-1);
+CPRsell=O>(L+0.8*(H-L)) AND C<(H-0.8*(H-L)) AND H>ref(H,-1) AND L>ref(L,-1) AND C<ref(C,-1);
+
+//Hook Reversals Automatic Analysis
+HRbuy=O<(L+0.2*(H-L)) AND C>(H-0.2*(H-L)) AND H<ref(H,-1) AND L>ref(L,-1);
+HRsell=O>(L+0.8*(H-L)) AND C<(H-0.8*(H-L)) AND H<ref(H,-1) AND L>ref(L,-1);
+
+/*Island Reversals Automatic Analysis by Larry Lovrencic*/
+IRbuy=ref(L,-2)>ref(H,-1) AND L>ref(H,-1); 
+IRsell=ref(H,-2)<ref(L,-1) AND H<ref(L,-1);
+
+/*Key Reversals Automatic Analysis by Larry Lovrencic*/
+KRbuy=O<ref(C,-1) AND L<ref(L,-1) AND C>ref(H,-1);
+KRsell=O>ref(C,-1) AND H>ref(H,-1) AND C<ref(L,-1);
+
+/*Open/Close Reversals Automatic Analysis by Larry Lovrencic*/
+OCRbuy=O<(L+0.2*(H-L)) AND C>(H-0.2*(H-L)) AND H<ref(H,-1) AND L<ref(L,-1) AND C<ref(C,-1);
+OCRsell=O>(L+0.8*(H-L)) AND C<(H-0.8*(H-L)) AND H>ref(H,-1) AND L>ref(L,-1) AND C>ref(C,-1);
+
+/*Pivot Point Reversals Automatic Analysis by Larry Lovrencic*/
+
+PPRbuy=ref(L,-1)<ref(L,-2) AND ref(L,-1)<L AND C>ref(H,-1);
+PPRsell=ref(H,-1)>ref(H,-2) AND ref(H,-1)>H AND C<ref(L,-1);
+//End of signal 3
+
+revb=CPRbuy+HRbuy+IRbuy+KRbuy+OCRbuy+PPRbuy;
+revs=CPRsell+HRsell+IRsell+KRsell+OCRsell+PPRsell;
+//##################################
+///Strategies 
+day_open_time = 1 + BarsSince( Day() != Ref(Day(), -1));
+c_vel = (C - Ref(C, -1)) / Ref(C, -1);
+h_vel = (H - Ref(H, -1)) / Ref(H, -1);
+l_vel = (L - Ref(L, -1)) / Ref(L, -1);
+p_vel = c_vel + h_vel + l_vel;
+immediate_pressure = p_vel * V;
+numminutes = BarsSince(day_open_time);
+day_pressure = Sum(immediate_pressure, numminutes + 1);
+BSFBuy = Cross(day_pressure,0);
+BSFSell = Cross(0,day_pressure);//1
+PriceIn = ( ( H + L ) / 2 );
+Alpha = Param( "Alpha", 0.07, 0.01, 0.4, 0.01, 0.01 );
+CG = BullSig = BearSig = Trigger = Cycle = InstPeriod = Period = DeltaPhase = 0;
+
+SmoothX = ( PriceIn + 2 * Ref( PriceIn, -1 ) + 2 * Ref( PriceIn, -2 ) + Ref(
+PriceIn, -3 ) ) / 6;
+
+for ( i = 10; i < BarCount; i++ )
+{
+    Cycle[i] = ( ( 1 - 0.5 * alpha ) ^ 2 ) * ( SmoothX[ i ] - 2 * SmoothX[ i - 1
+] + SmoothX[ i - 2] ) + 2 * ( 1 - alpha ) * Cycle[ i - 1 ] - ( ( 1 - alpha ) ^ 2
+) * Cycle[ i - 2 ];
+    Q1[i] = ( .0962 * cycle[i] + .5769 * cycle[i-2] - .5769 * cycle[i-4] - .0962* cycle[i-6] ) * ( .5 + .08 * InstPeriod[i-1] );
+    I1[i] = cycle[i-3];
+
+    if ( Q1[i] != 0 AND Q1[i-1] != 0 )
+        DeltaPhase[i] = ( I1[i] / Q1[i] - I1[i-1] / Q1[i-1] ) / ( 1 + I1[i] *
+I1[i-1] / ( Q1[i] * Q1[i-1] ) );
+
+    if ( DeltaPhase[i] < 0.1 )
+        DeltaPhase[i] = 0.1;
+
+    if ( DeltaPhase[i] > 1.1 )
+        DeltaPhase[i] = 1.1;
+
+    mlen = 5;
+
+    for ( k = mlen - 1; k >= 0; k-- )
+    {
+        temparray[k] = DeltaPhase[i + k - ( mlen - 1 )];
+    }
+
+    temp = 0;
+
+    for ( k = mlen - 1; k > 0; k-- )
+    {
+        for ( j = mlen - 1; j > 0; j-- )
+        {
+            if ( temparray[j-1] > temparray[j] )
+            {
+                temp = temparray[j-1];
+                temparray[j-1] = temparray[j];
+                temparray[j] = temp;
+            }
+        }
+    }
+
+    MedianDelta[i] = temparray[mlen - 1 - ( mlen / 2 )];
+
+    if ( MedianDelta[i] == 0 )
+        DC[i] = 15;
+    else
+        DC[i] = 6.28318 / MedianDelta[i] + .5;
+
+    InstPeriod[i] = .33 * DC[i] + .67 * InstPeriod[i-1];
+
+    Period[i] = .15 * InstPeriod[i] + .85 * Period[i-1];
+
+    IntPeriod[i] = int( Period[i] / 2 );
+
+    num = 0;
+
+    denom = 0;
+
+    for ( j = 0; j < intPeriod[i]; j++ )
+    {
+        num = num + ( 1 + j ) * PriceIn[i - j];
+        denom = denom + PriceIn[i - j];
+    }
+
+    if ( denom != 0 )
+        CG[i] = -num / denom + ( IntPeriod[i] + 1 ) / 2;
+}
+
+Trigger = Ref( CG, -1 );
+BullSig = IIf( Cross( CG, Trigger ), True, False ) ;
+BearSig = IIf( Cross( Trigger, CG ), True, False ) ;//2
+function Cycle_Phase()
+{
+    Divider = Param( "Length", 4, 1, 20, 1, 1 );
+    SetBarsRequired( 100, 0 );
+    PriceIn = ( ( H + L ) / 2 );
+    DCPhase = RealPart = Imagpart = Period = Detrender = Q1 = I1 = jI = jQ = I2
+= Q2 = Re = Im = SmoothPeriod = DCPeriod = 0;
+    pi = 4 * atan( 1 );
+    DTR = pi / 180;
+    RTD = 180 / pi;
+    SmoothX = WMA( PriceIn * 100, Divider );
+
+    for ( i = 7;i < BarCount;i++ )
+    {
+        Detrender[i] = ( 0.0962 * SmoothX[i] + 0.5769 * SmoothX[i-2] - 0.5769 *
+SmoothX[i-4] - 0.0962 * SmoothX[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        Q1[i] = ( 0.0962 * Detrender[i] + 0.5769 * Detrender[i-2] - 0.5769 *
+Detrender[i-4] - 0.0962 * Detrender[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        I1[i] = Detrender[i-3];
+        jI[i] = ( 0.0962 * I1[i] + 0.5769 * I1[i-2] - 0.5769 * I1[i-4] - 0.0962
+* I1[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        jQ[i] = ( 0.0962 * Q1[i] + 0.5769 * Q1[i-2] - 0.5769 * Q1[i-4] - 0.0962
+* Q1[i-6] ) * ( 0.075 * Period[i-1] + 0.54 );
+        I2[i] = I1[i] - jQ[i];
+        Q2[i] = Q1[i] + jI[i];
+        I2[i] = 0.2 * I2[i] + 0.8 * I2[i-1];
+        Q2[i] = 0.2 * Q2[i] + 0.8 * Q2[i-1];
+        Re[i] = I2[i] * I2[i-1] + Q2[i] * Q2[i-1];
+        Im[i] = I2[i] * Q2[i-1] - Q2[i] * I2[i-1];
+        Re[i] = 0.2 * Re[i] + 0.8 * Re[i-1];
+        Im[i] = 0.2 * Im[i] + 0.8 * Im[i-1];
+        Period[i] = Nz( 360 / ( atan( Im[i] / Re[i] ) * RTD ) );
+        Period[i] = Max( Min( Period[i], 1.5 * Period[i-1] ), 0.67 * Period[i-1]
+);
+        Period[i] = Min( Max( Period[i], 6 ), 50 );
+        Period[i] = 0.2 * Period[i] + 0.8 * Period[i-1];
+        SmoothPeriod[i] = 0.33 * Period[i] + 0.67 * SmoothPeriod[i-1];
+        DCPeriod[i] = int( SmoothPeriod[i] + 0.5 );
+    }
+
+  return DCPeriod;
+}
+
+
+DCPeriod = Cycle_Phase();
+
+Slw = 4;
+A = Ema((CLOSE-LLV(LOW,15))/(HHV(H,15)-LLV(L,15)),Slw)*100;
+DSS = ema((A-LLV(A,15))/(HHV(A,15)-LLV(A,15)),Slw)*100;//Double Smoothed Stochastic from W.Bressert ( oversold=20, overbought=80)
+R=-100*((HHV(High,15)-Close))/(HHV(High,15)-LLV(Low,15));
+DIVR=(R-Ref(R,-1))*(C-Ref(C,-1));
+DIVB=IIf((DIVR>0) AND (R-Ref(R,-1))>0 AND (Ref(R,-1)<-90),-100,0);
+DIVS=IIf((DIVR<0) AND (R-Ref(R,-1))<0 AND (Ref(R,-1)>-10),-20,0);
+
+
+///////// SUPPORT LINE for selll
+
+AvgPrice = ( O + H + L + C ) / 4;  
+ND = Day() != Ref(Day(), -1);
+newPeriod = Day() != Ref( Day(), -1 );
+day_open_time = 1 + BarsSince( Day() != Ref(Day(), -1));
+bi = BarIndex();        // Just shorthand
+StartBar = StrToNum("2");   //1st bar == 0. Set to 1 so Ref(xxx, -1) doesn't give an error
+EndBar = BarCount -1;
+ExtraBarsRequired = 0;
+
+O1 = Ref(O,-1);O2 = Ref(O,-2);
+	H1 = Ref(H,-1);H2 = Ref(H,-2);
+	L1 = Ref(L,-1);L2 = Ref(L,-2);
+	C1 = Ref(C,-1);C2 = Ref(C,-2);
+myrsi=RSI(14);// 80 sell , 20 buy
+myroc=ROC(C,12);
+Cond8 = ( Cross( Signal( 12, 26, 9 ), MACD( 12, 26 ) ) )OR    MACD( 12, 26 ) > Ref( Signal( 12, 26, 9 ) * -2, -1 );
+Cond9=  Cross( StochD( 14, 3, 3 ), StochK( 14, 3 ) );
+Cond10=Cross( ADX( 14 ), PDI() )OR  Cross( MDI(), PDI() ) OR Cross( MDI(),ADX( 14 ) )OR( (PDI()>MDI()) OR (PDI()>ADX(14)))OR MDI()<ADX( 14 ) >PDI() ;
+Cond11 = ROC( Close, 10 ) < 25  AND RSIa( Close, 14 ) < 70 AND  CCIa( Close, 14 ) < 100;
+
+Cond12 =  (O>C AND H==O AND C>L) OR(O>C AND (O-C)/(.001+H-L)>.6) OR (O>C AND (H==O AND
+C==L) OR (O>C AND C==L)OR( C>O AND C==H)OR(((H-L)>4*(O-C)) AND ((H-C)/(.001+H-L)>= 0.75) AND ((H-O)/(.001+H-L))>= 0.75)); 
+
+ZZPercent=0.6;
+ZZ=Zig(C,ZZPercent);
+ZZbottom=(ZZ<Ref(ZZ,-1)) AND (ZZ<Ref(ZZ,1));
+ZZtop=(ZZ>Ref(ZZ,-1)) AND (ZZ>Ref(ZZ,1));
+ExitZscorelookback=5;
+ZScore=(C-MA(C,ExitZscorelookback))/StDev(C,ExitZscorelookback);
+
+percdiff = 0.6; /* peak detection threshold */
+PK= Peak( H, percdiff, 1 ) == High;
+TR= Trough( L, percdiff, 1 ) == Low;
+
+xTr1 = ValueWhen( Tr, L, 1 );
+xTr2 = ValueWhen( Tr, L, 2 );
+xTr3 = ValueWhen( Tr, L, 3 );
+xTr4 = ValueWhen( Tr, L, 4 );
+xPK1=ValueWhen(PK,H,1);
+xPK2=ValueWhen(PK,H,2);
+xPK3=ValueWhen(PK,H,3);
+xPK4=ValueWhen(PK,H,4);
+valB=valuewhen(ZZbottom,C,1);
+valT=valuewhen(ZZtop,C,1);
+val=valuewhen(ZZbottom,C,1);
+downup=IIf(xTr1>xTr2 and C>xTr1 AND xTr2<valB,1,0);
+topdown=iif(xPK1<xPK2 and C<xPK1 AND xPK2>valT,1,0);
+//
+
+/*function Support(p)
+{
+sup = LLV(low, p);
+sup[0] = low[0];
+p = min(p,BarCount); 
+for (i = 1; i < p; i++)
+{
+if(low[i] < sup[i-1]) sup[i] = low[i];
+else sup[i] = sup[i-1];
+}
+return sup;
+}
+
+function Resistance(p)
+{
+res = HHV(high, p);
+res[0] = high[0];
+p = min(p,BarCount); 
+for (i = 1; i < p; i++)
+{
+if(high[i] > res[i-1]) res[i] = high[i];
+else res[i] = res[i-1];
+}
+return res;
+}
+
+function OptimizeNot(a1, a2, a3, a4, a5)
+{
+return a2;
+}
+
+/*==============================================================================
+Entry and Exit Rules
+==============================================================================*/
+/*fast = 5;
+slow = 15;
+FastRes = Resistance(fast);
+FastSup = Support(fast);
+SlowRes = Resistance(slow);
+SlowSup = Support(slow);
+heat = 0.05;*/
+
+///
+periods =15;
+Percent = 5;
+DaysBack = 0; 
+RABars = 0; //initialize
+TotalBars = cum(1); //how many bars in database
+FinalBar = lastvalue(TotalBars);//number value of last bar
+EndDay = FinalBar - DaysBack;//for other than 0 DaysBack
+StartDay = EndDay - periods+1;//starting point for line
+Master1 = iif(TotalBars >= StartDay and TotalBars <= EndDay,1,0);//defined period
+RABars = iif(Master1,ref(RABars,-1)+1,0); // daily counter in defined period
+RABarKntr = iif(Master1,sum(RABars,periods),0); //Sum of daily counts
+
+/*  Regression Analysis Computations  */
+TempMeanX = iif(RABarKntr == periods,sum(RABarKntr,periods),0);  // Sum of individual day counters
+MeanX1 = hhv(TempMeanX,TotalBars)/periods;  //  Final number divided by number of days
+MeanX = lastvalue(MeanX1); 
+TempMeanY =  iif(RABarKntr == periods, sum(c,periods),0);
+MeanY1 = hhv(TempMeanY,TotalBars)/periods ;  //  Final sum  divided by number of days
+MeanY = lastvalue(MeanY1);  
+Slope1 = iif(TotalBars == EndDay,linregslope(c,periods),0);
+Slope2 = iif(hhv(Slope1,FinalBar)>=0,hhv(slope1,FinalBar),llv(Slope1,FinalBar));
+slope = lastvalue(Slope2);
+Intercept = MeanY -Slope * MeanX;
+
+/*  Linear Regression Line = Intercept plus the Slope times RABarKntr  */
+LRLine = Intercept + Slope * RABarKntr; 
+
+///////
+
+/////EXTRA STRATEGIES
+Range=15;
+HiC = HHV( Close, Range );
+LoC = LLV( Close, Range );
+Stoc = ( Close - LoC ) / ( HiC - LoC );
+
+Lookback = Range - 1;
+
+Event = Ref( Cross( Stoc, 0.2 ), -Lookback );
+
+PctGainRange = 0.3; // defines % gain range for X axis
+
+FuturePrice = ROC( Close, Lookback );
+FuturePrice = Min( PctGainRange, Max( -PctGainRange, FuturePrice ) ); // keep values in range
+FuturePrice = Round( 100 * ( FuturePrice + PctGainRange )/( 2 * PctGainRange ) ); // map range to to 0..100
+
+PredictBin = 0;
+
+for( i = 0; i < BarCount AND BarCount > 100; i++ )
+{
+    if( Event[ i ] ) PredictBin[ FuturePrice[ i ] ]++;
+}
+
+
+nc = Ref( Close, 1 ); // next close
+pc = Ref( Close, -1 ); // previous close
+no = Ref( Open, 1 ); // next open
+po = Ref( Open, -1 ); // previous open
+
+ZZPercent =0.3;// Param("ZZPercent", 5 );
+ATRPeriod =3;// Param("ATRPeriod", 5 );
+ATRFactor =1.5;// Param("ATRFactor", 1.5, 0, 5 );
+
+HLPivot = ZZPercent * 0.01 + ATRFactor * ATR( ATRPeriod )/Close;
+
+Length = 4;
+d1dxy = 25;
+d2snl = 12;
+Sellmonth = 6;
+Buymonth = 9;
+Lrsnlsell = -0.8;
+Lrsdxysell = 0.3;
+MAsnl = 15;
+MAsell = 15;
+MAdxy = 50;
+data2 = Foreign("$NDX", "C");
+data3 = Foreign("AAPL", "C");
+RS = EMA( C/data3, 3 );
+LRSNL = 100 * LinRegSlope( RS, D2SNL )/LinearReg( RS, D2SNL );
+LRSDXY = 100 * LinRegSlope( data2, D1DXY )/LinearReg( data2, D1DXY );
+//Cover1 =          LRSNL > - LRSNLSELL;
+//Cover2 = C > EMA( C, MASELL ) AND          ROC( EMA( data2, MADXY ), 1 ) < 0 AND          data3 > EMA( data3, MASNL );
+//Cover = Cover1 OR Cover2;     
+AA = Foreign("$NDX", "C" ); // Nasdaq Total # of securitiies
+BB = Foreign("$NDX", "H" ); // Nasdaq new highs
+CC = Foreign("$NDX", "L" ); // Nasdaq new lows
+DD = Min( BB, CC );
+EE = 100 * DD/AA;
+FF = MA( EE, 10 );
+GG = IIf( FF >= 2.15 OR FF <= 0.40, FF, 1 );
+HH = BB / ( BB + CC );
+II = MA( HH, 10 );
+JJ = 100 * GG * II;
+x_temp_est = 0;
+x_est_last = 0;
+P_temp = 0;
+P_last = 0;
+Q = 0.022;
+R = 0.617;
+P = (H +L)/ 2;
+z_real = EMA(EMA(P,3),3) ;
+x_est_last = z_real + TSF(P,3);
+ 
+for (i=0;i<BarCount;i++)
+{
+x_temp_est = x_est_last;
+P_temp = P_last + Q;
+K = P_temp * (1.0/(P_temp + R));
+z_measured = z_real;
+x_est = x_temp_est + K * (z_measured - x_temp_est);
+P = (1- K) * P_temp;
+P_last = P;
+x_est_last = x_est;
+ 
+}
+ 
+
+B4=MA(C,5)>x_est_last;
+S4= MA(C,5)<x_est_last ;
+B5=(JJ-Ref(JJ,-1))/(C-Ref(C,-1))>0 AND Correlation(JJ,C,15)>0.8; //positive correlated 
+S5=(JJ-Ref(JJ,-1))/(C-Ref(C,-1))<0;
+B6 = LRSDXY < LRSDXYSELL AND      LRSNL > LRSNLSell;
+//Short =       LRSDXY > - LRSDXYSELL AND        LRSNL < -LRSNLSELL;
+Sell1 = C < EMA( C, MASELL ) AND     LRSNL < LRSNLSELL;
+Sell2 =       LRSDXY > LRSDXYSELL;
+S6 = Sell1 OR Sell2;
+
+
+///////////////////
+
+
+listnumB = 15; // we use watchlist 10 for storing buy stocks
+
+// erase the watchlist when we process very first symbol
+if ( Status( "stocknum" ) == 0 )
+{
+    // retrieve watchlist members
+    oldlist = CategoryGetSymbols( categoryWatchlist, listnumB);
+
+    // iterate through the list and remove tickers
+    for ( i = 0; ( sym = StrExtract( oldlist, i ) ) != ""; i++ )
+    {
+        CategoryRemoveSymbol( sym, categoryWatchlist, listnumB );
+    }
+}
+
+listnumS = 16; // we use watchlist 11 for storing sell stocks
+
+// erase the watchlist when we process very first symbol
+if ( Status( "stocknum" ) == 0 )
+{
+    // retrieve watchlist members
+    oldlist = CategoryGetSymbols( categoryWatchlist, listnumS);
+
+    // iterate through the list and remove tickers
+    for ( i = 0; ( sym = StrExtract( oldlist, i ) ) != ""; i++ )
+    {
+        CategoryRemoveSymbol( sym, categoryWatchlist, listnumS );
+    }
+}
+
+watchlistB=InWatchList(10);
+watchlistS=InWatchList(11);
+watchlistH=InWatchList(13);
+
+FilterB=(candleAbuy or revb OR BullSig OR DCPeriod<6 OR DIVB OR DSS<20 OR b4 OR b5 OR b6) AND watchlistB;
+
+
+//sellline=C<xTr2 AND C<valB AND C<LastValue(LRLine)*0.995 AND C<LastValue(SlowSup) AND Cond8 AND cond9 AND  cond10 AND Cond11 AND Cond12; 
+//sellwarning=xTr2*1.02 AND C<val*1.003 AND xTr1<xTr2*1.01 AND downup;
+//sellpoint = (C<ValueWhen(sellline,C,1) OR C<ValueWhen(sellwarning,C,1));// AND sellline AND C<ValueWhen(sellwarning,C,1); //ValueWhen(bottomline,C,1)>ValueWhen(bottomline,C,2) 
+FilterS=(candleAsell OR revs OR BearSig OR DCPeriod>20 OR DIVS OR s4 OR s5 OR s6) AND watchlistS AND watchlistH ;
+Filter=(FilterB+FilterS)==1;
+
+AddColumn(FilterB,"FilterB",1.2,ColorGreen);
+AddColumn(FilterS,"FilterS",1.2,ColorGreen);
+//AddColumn(sellline,"sellline",1.2,ColorGreen);
+//AddColumn(sellwarning,"sellwarning",1.2,ColorGreen);
+
+
+
+if ( LastValue( Cum( FilterB AND Status( "barinrange" ) ) )  )
+    CategoryAddSymbol( "", categoryWatchlist, listnumB );
+    
+if ( LastValue( Cum( FilterS AND Status( "barinrange" ) ) )  )
+    CategoryAddSymbol( "", categoryWatchlist, listnumS );
+
+
+	
+/////// Cancell Code
+IBPosSize=0;
+
+ibc = GetTradingInterface("IB");
+IBcStatus = ibc.IsConnected();
+
+// Work out how much money there is and adjust risk size
+
+
+if( IBcStatus AND LastValue(MarketON))
+{
+     
+   
+
+	ibc.CancelAllPendingOrders();
+   
+    
+   
+}
+else IBPosSize = 0;
+ 
+
