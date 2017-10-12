@@ -1,0 +1,123 @@
+//https://github.com/parthasen/ALGO/blob/mkt_st/signal
+//https://github.com/parthasen/ALGO/blob/mkt_st/SPY_level3_30May17
+//https://github.com/parthasen/ALGO/blob/mkt_st/SPY_level3_july #latest
+
+#include "C:\Users\Michal\Dropbox\incl_trade_setup.afl"
+//https://github.com/parthasen/ALGO/blob/mkt_st/incl_trade_setup.afl
+// need to check option chain. "SPY   170721C00243000-SMART-OPT" and "SPY   170721P00243000-SMART-OPT"
+
+#include "C:\Users\Michal\Dropbox\incl_market_state.afl"
+// we will get market state lines like : 
+	//Expected_line,Expected_line_upper,Expected_line_lower. Based on starting price @ 675th bar. upper or lower is +- (UL-NL)/2. So upper will show maximum level 
+	//price, ACTV,B
+	//MS, MS_up,MS_dn are based on market state line UP,LL,NL. We expect price above UL is high level.
+    //Expected_line==SP_SPY
+    // sentiment_upline,sentiment_dnline,sentiment_nl are based on VXX and put/call ratio
+    //C_30Min_SPY
+
+// predicted_line is formed bassed on Expected_line and expected_movement
+
+_SECTION_BEGIN("market -state-PLOT"); 
+
+Plot(O_SPY,"SPY",colorWhite,styleCloud);
+
+//Plot(C_30Min_SPY,"C_30Min_SPY",colorlightBlue,styleStaircase);// sell or cover indicator
+//Plot(C_5Min_SPY,"C_5Min_SPY",colorlightBlue,styleStaircase); // Used for BS_point
+plot(B,"B",colorRed,styleLine);// Used for BS_point
+Plot(sentiment_upline,"sent_up",colorGreen,styleThick);
+Plot(sentiment_dnline,"sent_dn",colorRed,styleThick);
+//plot(MS_up,"MS_up",colorGreen,styleLine);
+//plot(MS_dn,"MS_dn",colorRed,styleLine);
+//plot(MS_VXX_up,"MS_VXX_up",colorGreen,styleLine);
+//plot(MS_VXX_dn,"MS_VXX_dn",colorRed,styleLine);
+//plot(NL,"NL",colorblue,styleThick);
+//plot(SP_SPY,"SP_SPY",colorlightblue,styleThick);
+
+//plot(sentiment_vxx,"sentiment_vxx",colorBlue,styleLeftAxisScale);
+//plot(sentiment_vxx_ma,"sentiment_vxx_ma",colorLightBlue,styleLeftAxisScale);
+//plot(sentiment_vxx_HHV,"sentiment_vxx_HHV",colorGreen,styleLeftAxisScale);
+//plot(sentiment_vxx_LLV,"sentiment_vxx_LLV",colorRed,styleLeftAxisScale);
+
+//plot(sentimetn_pc,"sentimetn_pc",colorBlue,styleLeftAxisScale);
+//plot(sentimetn_pc_ma,"sentimetn_pc_ma",colorLightBlue,styleLeftAxisScale);
+//plot(MS_pc_up,"MS_pc_up",colorGreen,styleLine);
+//plot(MS_pc_dn,"MS_pc_up",colorRed,styleline);
+_SECTION_END();
+
+#include "C:\Users\Michal\Dropbox\incl_indicator.afl"
+//OLS_price,OLS_price_z
+//P_steer,P_steer_spread
+//velocity_mom,velocity_mr 
+//market_trend
+//predicted_line
+
+_SECTION_BEGIN("indicator-PLOT"); 
+//Plot(predicted_line,"predicted_line",colorLightBlue,styleThick);
+//Plot(expected_line,"expected_line",colorLightBlue,styleThick);
+Plot(OLS_price,"OLS_price",colorYellow,styleStaircase);
+//Plot(OLS_up,"OLS_up",colorGreen,styleStaircase);
+//Plot(OLS_dn,"OLS_dn",colorred,styleStaircase);
+//Plot(OLS_price_z,"OLS_price_z",colorBlue,styleLeftAxisScale);
+//Plot(market_trend,"market_trend",colorWhite,styleLeftAxisScale);
+
+//plot(-P_D,"P_D",colorBlue,styleLeftAxisScale);
+//plot(-P_I,"P_I",colorLightBlue,styleLeftAxisScale);
+//Plot(spread,"spread",colorYellow,styleLeftAxisScale);
+//Plot(spread_up,"spread_up",colorGreen,styleLeftAxisScale);
+//Plot(spread_dn,"spread_dn",colorRed,styleLeftAxisScale);
+//plot(P_steer,"P_steer",colorLightBlue,styleLeftAxisScale);
+//plot(P_steer_spread,"P_steer_spread",colorLightBlue,styleLeftAxisScale);
+//plot(P_steer_spread_ma,"P_steer_spread_ma",colorLightYellow,styleLeftAxisScale);
+//plot(P_steer_ma,"P_steer_D",colorLightBlue,styleLeftAxisScale);
+plot(0,"Zero",colorWhite,styleLeftAxisScale);
+
+//plot(velocity_mom,"velocity_mom",colorLightBlue,styleLeftAxisScale);
+plot(velocity,"velocity",colorLightYellow,styleLeftAxisScale);
+
+//plot(P_sentiment_upline,"P_sentiment_upline",colorLightBlue,styleLeftAxisScale);
+//plot(P_sentiment_dnline,"P_sentiment_dnline",colorLightYellow,styleLeftAxisScale);
+
+//plot(market_increasing,"market_increasing",colorLightBlue,styleLeftAxisScale);
+//plot(market_decreasing,"market_decreasing",colorLime,styleLeftAxisScale);
+_SECTION_END();
+
+
+_SECTION_BEGIN("strategy"); 
+ibc = GetTradingInterface("IB");
+averageprice=ibc.GetPositionInfo(ABName, "Avg. cost");
+IBPosSize = ibc.GetPositionSize(ABName);
+printf("average price:"+"\t"+averageprice+"\n");
+printf("position list:"+"\t"+IBPosSize+"\n");
+
+ // velocity 0 to 10 buy, 0 to -10 ss, 55 above sell short, -55 buy. more than +-55 leads to reversion or break out.
+
+B=O_SPY>sentiment_dnline+0.05 AND O_SPY>predicted_line+0.05  AND velocity<10;
+S=O_SPY>predicted_line+0.2  AND velocity>50 AND velocity<Ref(velocity,-1)-3;
+
+SS=O_SPY<sentiment_upline-0.05 AND O_SPY<predicted_line-0.05  AND velocity>10;
+CO=O_SPY<predicted_line-0.2 OR Cross(-2,P_steer_spread);
+
+Buysignal= B;
+Shortsignal=SS;
+Coversignal=CO;
+Sellsignal=S;
+
+S_=O_SPY<ValueWhen(Shortsignal,O_SPY)-0.1 AND IBPosSize>0;
+C_=O_SPY>ValueWhen(Buysignal,O_SPY)+0.1 AND IBPosSize<0;//loss
+
+B_=O_SPY>ValueWhen(C_,O_SPY)+0.05;
+S_=O_SPY<ValueWhen(S_,O_SPY)-0.05;
+
+Buy=Buysignal OR B_;
+Short=Shortsignal OR S_;
+Cover=(Coversignal AND O_SPY-averageprice>0.06) OR (C_ AND O_SPY-averageprice<-0.1);
+Sell= (Sellsignal AND O_SPY-averageprice<-0.06)  OR (S_ AND O_SPY-averageprice>0.1);
+
+PlotShapes(IIf(Buy, shapeUpTriangle, shapeNone),colorGreen,1,L, Offset=-2);
+PlotShapes(IIf(Short,shapeDownTriangle, shapeNone),colorRed, 1, H, Offset=2);
+PlotShapes(IIf(Sell,shapeCircle, shapeNone),colorLime, 0, L, Offset=-2);
+PlotShapes(IIf(Cover, shapeCircle, shapeNone),colorOrange, 0,H, Offset=2);
+
+_SECTION_END();
+
+//#include "C:\Users\Michal\Dropbox\incl_signal.afl"

@@ -1,0 +1,381 @@
+//https://github.com/parthasen/ALGO/blob/mkt_st/signal
+//https://github.com/parthasen/ALGO/blob/mkt_st/SPY_level3_30May17
+
+OptimizerSetEngine("cmae"); // we can use "spso" or "trib" here
+
+_SECTION_BEGIN("Trading Set up");
+//Filename = _DEFAULT_NAME();
+SubmitOrders = True; 
+Tracing = False;    
+MarketON=093000;
+US_Trade_On=TimeNum() >= 094000 AND TimeNum() <=154500;
+printf("US_Trade_On:"+"\t"+US_Trade_On+"\n");
+ABName="SPY";//IBName =Name();//getfndata("Alias");
+Bars_so_far_today = 1 + BarsSince( Day() != Ref(Day(), -1));
+_SECTION_END();
+
+_SECTION_BEGIN("VXX-prices");
+SetForeign("VXX");
+C_VXX = C;
+C_30Min_VXX=TimeFrameGetPrice("C_VXX",6*in5minute, -1);
+RestorePriceArrays();
+_SECTION_END();
+
+_SECTION_BEGIN("OPT-prices");
+SetForeign("SPY   170721C00243000-SMART-OPT");
+C_OP_call = C;
+C_30Min_call=TimeFrameGetPrice("C_OP_call",6*in5minute, -1);
+SetForeign("SPY   170721P00243000-SMART-OPT");
+C_OP_put = C;
+C_30Min_put=TimeFrameGetPrice("C_OP_put",6*in5minute, -1);
+RestorePriceArrays();
+_SECTION_END();
+
+
+_SECTION_BEGIN("SPY-Variables");
+SetForeign(ABName);
+O_SPY = O;
+H_SPY = H;
+L_SPY = L;
+C_SPY = C;
+v_SPY = IIf(V==0,1,Volume);
+RestorePriceArrays();
+
+// Useful to find state of market
+C_YDay_SPY = TimeFrameGetPrice("C_SPY", inDaily, -1); // yesterdays close https://www.amibroker.com/guide/h_timeframe.html
+H_YDay_SPY = TimeFrameGetPrice("H_SPY", inDaily, -1);
+L_YDay_SPY = TimeFrameGetPrice("L_SPY", inDaily, -1);
+C_5Min_SPY=TimeFrameGetPrice("C_SPY", in5minute, -1);// TimeFrameExpand( ma5_13, in5Minute)
+L_5Min_SPY=TimeFrameGetPrice("L_SPY",in5minute, -1);// TimeFrameExpand( ma5_13, in5Minute)
+H_5min_SPY=TimeFrameGetPrice("H_SPY",in5minute,-1);
+O_5min_SPY=TimeFrameGetPrice("O_SPY",in5minute,-1);
+C_1Min_SPY=TimeFrameGetPrice("C_SPY", in1minute, -1);
+H_1Min_SPY=TimeFrameGetPrice("H_SPY", in1minute, -1);
+L_1Min_SPY=TimeFrameGetPrice("L_SPY", in1minute, -1);
+C_30Min_SPY=TimeFrameGetPrice("C_SPY",6*in5minute, -1);
+
+L_short=12;
+L_long=60;
+
+
+_SECTION_BEGIN("LEVEL price"); 
+SP_SPY=ValueWhen(Bars_so_far_today==1,O_SPY); 
+DH=H_SPY-SP_SPY;
+DL=L_SPY-SP_SPY;
+D=O_SPY-SP_SPY;
+UL=H_YDay_SPY; // level line 1
+LL=L_YDay_SPY;// level line 2
+NL=(UL+LL)/2; // level line 3
+
+_SECTION_END();
+
+_SECTION_BEGIN("market state"); 
+price=(Ref(H_SPY,-1)+Ref(L_SPY,-1)+Ref(C_SPY,-1))/3;
+ACTV=v_SPY>50 AND v_SPY>MA(v_SPY,L_long)*0.75;
+B=(HHV(H_5min_SPY,12) + HHV(H_1Min_SPY-L_1Min_SPY,L_long)+LLV(L_5Min_SPY,12) + LLV(H_1Min_SPY-L_1Min_SPY,L_long))/2;
+//MARKET STATE == MS. No trade at 0 state . MS==4 is extremely up and 1 is extremely down
+MS_pr=IIf(O_SPY>=UL,4,IIf(O_SPY>=NL AND O_SPY<UL,3,IIf(O_SPY<NL AND O_SPY>=LL,2,IIf(O_SPY<LL,1,0))));
+MS=ValueWhen(MS_pr!=Ref(MS_pr,-1),C_SPY);
+
+// Market down if <MS or up >MS
+	// Market downward if <C_30Min_SPY and <B
+	// Market upward if >C_30Min_SPY and >B
+	// updaward can be at down or up
+
+VSD=ValueWhen(Cross(B,O_SPY) OR Cross(C_5Min_SPY,O_SPY) OR Cross(SP_SPY,C_5Min_SPY) OR Cross(C_30Min_SPY,C_5Min_SPY) OR Cross(MS,C_5Min_SPY),O_SPY);
+VSU=ValueWhen(Cross(O_SPY,B) OR Cross(O_SPY,C_5Min_SPY) OR Cross(C_5Min_SPY,SP_SPY) OR Cross(C_5Min_SPY,C_30Min_SPY) OR Cross(C_5Min_SPY,MS),O_SPY);
+if(LastValue(O_SPY)<LastValue(VSD))
+VSDU=VSD;
+if(LastValue(O_SPY)>LastValue(VSU))
+VSDU=VSU;
+else VSDU=B;
+
+//VWAP spread
+totalVolume = Sum(Ref(v_SPY,-1),60);
+VWAP = Sum (price *Ref(v_SPY,-1),60) /totalVolume;
+spread=price-VWAP;
+OLS_spread=LinRegIntercept(spread,60)+LinRegSlope(spread, 60 )*spread;
+//exp_spread=IIf(O_SPY>MS+0.05,B-abs(OLS_spread),IIf(O_SPY<MS-0.05,B+abs(OLS_spread),B));  
+exp_spread=VSDU+OLS_spread;
+
+// VXX and OPT sentiment
+sentiment_vxx=C_VXX;
+sentimetn_pc=C_OP_put/C_OP_call;
+
+sentiment_vxx_ma=MA(sentiment_vxx,60);
+sentimetn_pc_ma=MA(sentimetn_pc,60);
+
+
+// Fixed price  more: MS and NL
+
+//^^ BS_point is important
+
+B_point_sentiment= ValueWhen((Cross(Ref(sentimetn_pc,-1),sentimetn_pc) AND sentiment_vxx<Ref(sentiment_vxx,-12)) OR Cross(exp_spread-O_SPY,0.1) OR Cross(O_SPY,VSDU),O_SPY);
+S_point_sentiment= ValueWhen((Cross(sentimetn_pc,Ref(sentimetn_pc,-1)) AND sentiment_vxx>Ref(sentiment_vxx,-12)) OR Cross(O_SPY-exp_spread,0.1) OR Cross(VSDU,O_SPY),O_SPY);
+
+
+if(LastValue(O_SPY)>LastValue(B_point_sentiment)) 
+BS_point=B_point_sentiment;
+if(LastValue(O_SPY)<LastValue(S_point_sentiment)) 
+BS_point=S_point_sentiment;
+else
+BS_point=C_5Min_SPY;
+
+
+// PID 
+P_BS=(O_SPY-BS_point);
+	//another
+P_NL=(O_SPY-NL);
+P_NL=MA(P_NL,60);
+P_NL_ma=MA(P_NL,60);
+
+// PID_point, VXX_point and pc_point, MS,NL and velocity are important
+
+
+P_D=P_BS-Ref(P_BS,-12);
+P_I=Ref(P_BS,-1);
+P_I +=P_I;
+P_steer=-2*P_BS-3*P_D-0.5*P_I;
+
+P_steer_ma=MA(P_steer,60);
+
+
+// VELOCITY
+// velocity per 5m above 0.25 is high speed.  
+velocity_=O_SPY-BS_point;
+	//1. velocity_5m_ma>velocity_1m_ma and >B buy signal and < is sell signal
+    //2. velocity change at peak makes a reversion. 
+velocity=Sum(IIf(-P_steer<-0.01 AND P_BS<0  AND P_D/0.05<-1,-1,IIf(-P_steer>0.01 AND P_BS>0 AND P_D/0.05>1,1,0)),60);
+velocity_ma=MA(velocity,60);
+
+
+
+_SECTION_END();
+
+
+_SECTION_BEGIN("PLOT"); 
+
+Plot(O_SPY,"SPY",colorWhite,styleCloud);
+Plot(NL,"NL",colorRed,styleLine);
+Plot(BS_point,"BS_point",colorLightOrange,styleStaircase);
+//Plot(exp_spread,"exp_spread",colorLightOrange,styleStaircase);
+//plot(-P_steer,"P_steer",colorBlue,styleLeftAxisScale);
+//plot(-P_steer_ma,"P_steer_ma",colorLightBlue,styleLeftAxisScale);
+//plot(0,"Z",colorWhite,styleLeftAxisScale);
+//plot(velocity,"velocity",colorBlue,styleLeftAxisScale);
+//plot(velocity_ma,"velocity_ma",colorLightBlue,styleLeftAxisScale);
+//plot(sentiment_vxx,"sentiment_vxx",colorBlue,styleLeftAxisScale);
+//plot(sentiment_vxx_ma,"sentiment_vxx_ma",colorlightBlue,styleLeftAxisScale);//sentimetn_pc
+//plot(sentimetn_pc,"sentimetn_pc",colorBlue,styleLeftAxisScale);
+//plot(sentimetn_pc_ma,"sentimetn_pc_ma",colorlightBlue,styleLeftAxisScale);
+plot(P_NL,"P_NL",colorBlue,styleLeftAxisScale);
+plot(P_NL_ma,"P_NL_ma",colorlightBlue,styleLeftAxisScale);
+
+_SECTION_END();
+
+
+_SECTION_BEGIN("signal"); 
+
+ibc = GetTradingInterface("IB");
+averageprice=ibc.GetPositionInfo(ABName, "Avg. cost");
+IBPosSize = ibc.GetPositionSize(ABName);
+printf("average price:"+"\t"+averageprice+"\n");
+printf("position list:"+"\t"+IBPosSize+"\n");
+
+//https://github.com/parthasen/ALGO/blob/mkt_st/signal
+//NL based on last day 
+
+// C_5Min_SPY>NL and P_NL>P_NL_ma is up trend == buy momentum
+
+
+//B= O_SPY>NL+0.1 AND O_SPY>BS_point AND O_SPY<BS_point+0.05 AND -P_steer>0 AND -P_steer>Ref(-P_steer,-1) AND sentimetn_pc<sentimetn_pc_ma AND velocity>0 AND velocity<5 AND Cross(O_SPY,MA(O_SPY,3));
+//S1=(O_SPY>BS_point+0.15 OR -P_steer>0.2 OR velocity>10 OR -P_steer<-P_steer_ma-0.25) AND O_SPY-averageprice>0.05 AND IBPosSize>0;// profit
+S2= abs(-P_steer_ma-(-P_steer))>0.4 AND O_SPY<BS_point-0.1 AND velocity<-8 AND abs(sentimetn_pc-sentimetn_pc_ma)>0.02 AND IBPosSize>0 AND O_SPY-averageprice<-0.07;//loss
+
+//SS= O_SPY<NL AND (O_SPY<BS_point AND O_SPY>BS_point-0.05 AND -P_steer<0 AND -P_steer<Ref(-P_steer,-1) AND sentimetn_pc<sentimetn_pc_ma AND velocity<-1 AND velocity>-5) AND Cross(MA(O_SPY,3),O_SPY);
+//C1= (O_SPY<BS_point-0.15 OR -P_steer<-0.2 OR velocity<-10 OR  -P_steer>-P_steer_ma+0.25) AND averageprice-O_SPY>0.05 AND IBPosSize<0;// profit
+C2= abs(-P_steer_ma-(-P_steer))>0.4 AND O_SPY>BS_point+0.1 AND velocity>8 AND abs(sentimetn_pc-sentimetn_pc_ma)>0.02 AND IBPosSize<0 AND O_SPY-averageprice>0.07;//loss
+// AND sentiment_vxx<sentiment_vxx_ma 
+B= P_NL<P_NL_ma AND  O_SPY>BS_point AND (Cross(sentimetn_pc_ma,sentimetn_pc) OR  Cross(-P_steer,-P_steer_ma) OR Cross(velocity,velocity_ma));
+S1= O_SPY-averageprice>0.05 AND IBPosSize>0 AND (sentimetn_pc>sentimetn_pc_ma OR -P_steer<-P_steer_ma OR velocity<velocity_ma);
+//AND sentiment_vxx>sentiment_vxx_ma
+SS= P_NL>P_NL_ma AND O_SPY<BS_point AND (Cross(sentimetn_pc,sentimetn_pc_ma) OR Cross(-P_steer_ma,-P_steer) OR Cross(velocity_ma,velocity));
+C1= averageprice-O_SPY>0.05 AND IBPosSize<0 AND (sentimetn_pc<sentimetn_pc_ma OR -P_steer>-P_steer_ma OR velocity>velocity_ma);
+
+
+
+Buy= B;// OR B2 ;
+Short= SS;// OR SS2  ;
+Cover=C1 OR C2;
+Sell= S1 OR S2;
+
+PlotShapes(IIf(Buy, shapeUpTriangle, shapeNone),colorGreen,1,L, Offset=-2);
+PlotShapes(IIf(Short,shapeDownTriangle, shapeNone),colorRed, 1, H, Offset=2);
+PlotShapes(IIf(Sell,shapeCircle, shapeNone),colorLime, 0, L, Offset=-2);
+PlotShapes(IIf(Cover, shapeCircle, shapeNone),colorOrange, 0,H, Offset=2);
+
+
+_SECTION_END();
+
+/*
+
+_SECTION_BEGIN("Trade"); 
+LastBuy = LastValue(buy);
+LastShort = LastValue(short);
+LastSell = LastValue(Sell);
+LastCover = LastValue(cover);
+e = Equity(1,0);
+start = ParamDate( "Start Date", "2016-04-01" );
+end=ParamDate("End Date", "2017-12-31" );
+Lprofit = e - ValueWhen( Buy, e); 
+Sprofit = e - ValueWhen( Short, e); 
+
+BP= LastBuy;
+SSP=LastShort ;
+SP= LastSell;//list two for stocks, stop loss only for stocks 
+CP= LastCover;
+	
+_SECTION_END();
+
+
+_SECTION_BEGIN("AMI-IB Trigger");
+ibc = GetTradingInterface("IB");
+IBcStatus = ibc.IsConnected();
+OrderID = StaticVarGetText("OrderID"+ABName);
+if (OrderID == "" && (LastBuy || LastShort))
+{
+    StaticVarSetText("OrderID"+ABName,"DUMMY");
+}
+OrderStatus = ibc.GetStatus( OrderID , True );
+if( OrderStatus != "" ) StaticVarSetText("OrderStatus"+ABName,OrderStatus);
+Pending=ibc.IsOrderPending(OrderID);
+//SellPending=ibc.IsOrderPending(OrderID);
+//printf("OrderID:"+"\t"+OrderID+"\n");
+//printf("OrderStatus:"+"\t"+OrderStatus+"\n");
+//printf("Pending:"+"\t"+Pending+"\n");
+LastOrderID = StaticVarGetText("OrderID"+ABName);
+OID = StaticVarGetText("OrderID"+ABName);
+ORderStatus="";
+IBcStatusString = WriteIf(IBCStatus==0,"TWS Not Found",WriteIf(IBCStatus==1,"Connecting to TWS",WriteIf(IBCStatus==2,"TWS OK",WriteIf(IBCStatus==3,"TWS OK (msgs)",""))));
+if ( IBcStatus==2 )
+{
+	ibc = GetTradingInterface("IB");
+	averageprice=ibc.GetPositionInfo(ABName, "Avg. cost");
+	IBPosSize = ibc.GetPositionSize(ABName);
+	Min_RTS=LastValue(GetRTDataForeign("Bid",ABName))-averageprice; 
+	Min_RTC=averageprice-LastValue(GetRTDataForeign("Ask",ABName));
+	Bsignal=IBPosSize==0 AND US_Trade_On AND  LastBuy;
+	Ssignal=IBPosSize==1500 AND LastSell AND US_Trade_On;
+	SSsignal=IBPosSize==0 AND US_Trade_On AND LastShort;
+	CPsignal=IBPosSize==-1500 AND LastCover AND US_Trade_On;
+	
+	clean_n_hold=IBPosSize<0   AND Cross(TimeNum(),155500);
+	clean_p_hold=IBPosSize>0  AND Cross(TimeNum(),155500);
+	//further buy sell was at earlier version
+	
+	BC=Bsignal OR CPsignal OR clean_n_hold;
+	SS=SSsignal OR Ssignal OR clean_p_hold;
+	
+
+	if(LastValue(BC))  //BUY
+
+    {
+		if(LastValue(Bsignal) OR LastValue(CPsignal))
+		{
+			OID= ibc.PlaceOrder( ABName, "BUY",1500, "MKT",0, 0, "IOC", True); //size for general case
+		}
+		if(LastValue(clean_n_hold))
+		{
+			OID= ibc.PlaceOrder( ABName, "BUY",abs(IBPosSize), "MKT",0, 0, "IOC", True); //size for general case
+		}
+        OrderStatus = ibc.GetStatus( OID, True);
+        if(OrderStatus == "Filled"){
+        StaticVarSetText("OrderID"+ABName,OID);
+        }
+
+		for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        tradetime=GetPerformanceCounter()/1000; 
+            while ((GetPerformanceCounter()/1000 - tradetime) <25) // give up after 25 seconds
+             {
+                 ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                 //ORderStatus = ibc.GetStatus( OID, True);
+                 if (OrderStatus == "PreSubmitted" || OrderStatus == "Submitted" || OrderStatus == "Filled")
+                     break;
+             }
+                   
+
+    }
+
+
+    if(LastValue(SS))  //SHORT SELL
+    {
+
+		if(LastValue(SSsignal) OR LastValue(Ssignal))
+		{
+		    OID= ibc.PlaceOrder(ABName, "SELL",1500, "MKT",0, 0, "IOC", True); ////size for general case
+		}
+		if(LastValue(clean_p_hold))
+		{
+			OID= ibc.PlaceOrder( ABName, "SELL",abs(IBPosSize), "MKT",0, 0, "IOC", True); //size for general case
+		}
+
+        OrderStatus = ibc.GetStatus( OID, True);
+        if(OrderStatus == "Filled"){
+			StaticVarSetText("OrderID"+ABName,OID);
+        }
+               
+		for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+		tradetime=GetPerformanceCounter()/1000; 
+			while ((GetPerformanceCounter()/1000 - tradetime) <25) // give up after 5 seconds
+			{
+                 ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                 //ORderStatus = ibc.GetStatus( OID, True);
+                 if (OrderStatus == "PreSubmitted" || OrderStatus == "Submitted" || OrderStatus == "Filled")
+                     break;
+            }
+        
+                   
+
+    }
+ibc.ClearList(4);//error list clearing
+  //Exploration
+//IBcStatusString = WriteIf(IBCStatus==0,"TWS Not Found",WriteIf(IBCStatus==1,"Connecting to TWS",WriteIf(IBCStatus==2,"TWS OK",WriteIf(IBCStatus==3,"TWS OK (msgs)",""))));
+//LastOrderID = StaticVarGetText("OrderID"+ABName);
+//OrderStatus = ibc.GetStatus( LastOrderID , True );
+
+if( OrderStatus != "" ) StaticVarSetText("OrderStatus"+ABName,ORderStatus);
+
+
+}
+
+Filter=(Buy OR Short OR Sell OR Cover) AND LastOrderID!="DUMMY";// AND  Status("lastbarinrange");
+AddTextColumn(FullName(),"name",200);
+AddColumn(Buy,"Buy",1.0);
+AddColumn(Short,"Short",1.0);
+AddColumn(Sell,"Sell",1.0);
+AddColumn(Cover,"Cover",1.0);
+AddColumn(IIf(SubmitOrders,Asc("Y"),Asc("N")),"Transmit",formatChar);
+AddColumn(IIf(Buy OR Cover,Asc("L"),IIf(Short OR Sell,Asc("S"),Asc(" "))),"Buy/Sell",formatChar);
+AddColumn(IIf(Buy,BuyPrice,ShortPrice),"Entry",1.2);
+AddTextColumn(IBcStatusString,"IBC Status",100);
+
+_SECTION_END();
+
+
+_SECTION_BEGIN("Alert"); 
+
+//AlertIf( Buy, "EMAIL", "Buy Alert in "+FullName()+ "@"+BuyPrice,1 );
+
+//AlertIf( Sell, "EMAIL", "Sell Alert in "+FullName()+ "@"+SellPrice,1 );
+
+//AlertIf( Short, "EMAIL", "Short Alert in "+FullName()+ "@"+ShortPrice,3 );
+
+//AlertIf( Cover, "EMAIL", "Short Alert in "+FullName()+ "@"+CoverPrice,3 );
+
+_SECTION_END();
+
+
+
+
+
+
