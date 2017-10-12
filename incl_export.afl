@@ -1,0 +1,44 @@
+//Exporting data to csv
+
+// create folder for exporting purposes
+//Already
+//fmkdir( "C:\\Users\\Michal\\Dropbox\\");
+
+// open file for writing
+// file name depends on currently processed ticker
+fh = fopen("C:\\Users\\Michal\\Dropbox\\" + Name() + "ami.csv", "w" );
+if( fh )
+{
+    // write header line
+  fputs( "Ticker,Date/Time,Close,Volume,CA,PU,VXX,C5,C30,NL,MS_MR_upward,MS_MR_dnward\n", fh );
+  dn = DateNum();
+  tn = TimeNum();
+  // iterate through all the bars
+  for( i = 0; i < BarCount; i++ )
+  {
+   Line = Name() +
+   StrFormat(",%06.0f,%06.0f,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g\n",
+   dn[ i ] % 1000000,
+   tn[ i ],
+   Close[ i ],
+   OpenInt[ i ],
+   Volume[ i ],
+   C_OP_call[i],
+   C_OP_put[i],
+   C_VXX[i],
+   C_5Min_SPY[i],
+   C_30Min_SPY[i],
+   NL[i],
+   MS_MR_upward[i],
+   MS_MR_dnward[i]);
+  
+   fputs( Line, fh );
+  }
+ // close file handle
+  fclose( fh );
+}
+Buy=Sell=0; // for scan
+Filter = Status("lastbarinrange");
+AddTextColumn("Export done", "Status");
+
+

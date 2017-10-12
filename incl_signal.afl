@@ -1,0 +1,153 @@
+_SECTION_BEGIN("Trade"); 
+LastBuy = LastValue(buy);
+LastShort = LastValue(short);
+LastSell = LastValue(Sell);
+LastCover = LastValue(cover);
+e = Equity(1,0);
+start = ParamDate( "Start Date", "2016-04-01" );
+end=ParamDate("End Date", "2017-12-31" );
+Lprofit = e - ValueWhen( Buy, e); 
+Sprofit = e - ValueWhen( Short, e); 
+
+BP= LastBuy;
+SSP=LastShort ;
+SP= LastSell;//list two for stocks, stop loss only for stocks 
+CP= LastCover;
+	
+_SECTION_END();
+
+_SECTION_BEGIN("AMI-IB Trigger");
+ibc = GetTradingInterface("IB");
+IBcStatus = ibc.IsConnected();
+OrderID = StaticVarGetText("OrderID"+ABName);
+if (OrderID == "" && (LastBuy || LastShort))
+{
+    StaticVarSetText("OrderID"+ABName,"DUMMY");
+}
+OrderStatus = ibc.GetStatus( OrderID , True );
+if( OrderStatus != "" ) StaticVarSetText("OrderStatus"+ABName,OrderStatus);
+Pending=ibc.IsOrderPending(OrderID);
+//SellPending=ibc.IsOrderPending(OrderID);
+//printf("OrderID:"+"\t"+OrderID+"\n");
+//printf("OrderStatus:"+"\t"+OrderStatus+"\n");
+//printf("Pending:"+"\t"+Pending+"\n");
+LastOrderID = StaticVarGetText("OrderID"+ABName);
+OID = StaticVarGetText("OrderID"+ABName);
+ORderStatus="";
+IBcStatusString = WriteIf(IBCStatus==0,"TWS Not Found",WriteIf(IBCStatus==1,"Connecting to TWS",WriteIf(IBCStatus==2,"TWS OK",WriteIf(IBCStatus==3,"TWS OK (msgs)",""))));
+if ( IBcStatus==2 )
+{
+	ibc = GetTradingInterface("IB");
+	averageprice=ibc.GetPositionInfo(ABName, "Avg. cost");
+	IBPosSize = ibc.GetPositionSize(ABName);
+	Min_RTS=LastValue(GetRTDataForeign("Bid",ABName))-averageprice; 
+	Min_RTC=averageprice-LastValue(GetRTDataForeign("Ask",ABName));
+	Bsignal=IBPosSize==0 AND US_Trade_On AND  LastBuy;
+	Ssignal=IBPosSize==400 AND LastSell AND US_Trade_On;
+	SSsignal=IBPosSize==0 AND US_Trade_On AND LastShort;
+	CPsignal=IBPosSize==-400 AND LastCover AND US_Trade_On;
+	
+	clean_n_hold=IBPosSize<0   AND Cross(TimeNum(),155500);
+	clean_p_hold=IBPosSize>0  AND Cross(TimeNum(),155500);
+	//further buy sell was at earlier version
+	
+	BC=Bsignal OR CPsignal OR clean_n_hold;
+	SS=SSsignal OR Ssignal OR clean_p_hold;
+	
+
+	if(LastValue(BC))  //BUY
+
+    {
+		if(LastValue(Bsignal) OR LastValue(CPsignal))
+		{
+			OID= ibc.PlaceOrder( ABName, "BUY",400, "MKT",0, 0, "IOC", True); //size for general case
+		}
+		if(LastValue(clean_n_hold))
+		{
+			OID= ibc.PlaceOrder( ABName, "BUY",abs(IBPosSize), "MKT",0, 0, "IOC", True); //size for general case
+		}
+        OrderStatus = ibc.GetStatus( OID, True);
+        if(OrderStatus == "Filled"){
+        StaticVarSetText("OrderID"+ABName,OID);
+        }
+
+		for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        tradetime=GetPerformanceCounter()/1000; 
+            while ((GetPerformanceCounter()/1000 - tradetime) <25) // give up after 25 seconds
+             {
+                 ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                 //ORderStatus = ibc.GetStatus( OID, True);
+                 if (OrderStatus == "PreSubmitted" || OrderStatus == "Submitted" || OrderStatus == "Filled")
+                     break;
+             }
+                   
+
+    }
+
+
+    if(LastValue(SS))  //SHORT SELL
+    {
+
+		if(LastValue(SSsignal) OR LastValue(Ssignal))
+		{
+		    OID= ibc.PlaceOrder(ABName, "SELL",400, "MKT",0, 0, "IOC", True); ////size for general case
+		}
+		if(LastValue(clean_p_hold))
+		{
+			OID= ibc.PlaceOrder( ABName, "SELL",abs(IBPosSize), "MKT",0, 0, "IOC", True); //size for general case
+		}
+
+        OrderStatus = ibc.GetStatus( OID, True);
+        if(OrderStatus == "Filled"){
+			StaticVarSetText("OrderID"+ABName,OID);
+        }
+               
+		for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+		tradetime=GetPerformanceCounter()/1000; 
+			while ((GetPerformanceCounter()/1000 - tradetime) <25) // give up after 5 seconds
+			{
+                 ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                 //ORderStatus = ibc.GetStatus( OID, True);
+                 if (OrderStatus == "PreSubmitted" || OrderStatus == "Submitted" || OrderStatus == "Filled")
+                     break;
+            }
+        
+                   
+
+    }
+ibc.ClearList(4);//error list clearing
+  //Exploration
+//IBcStatusString = WriteIf(IBCStatus==0,"TWS Not Found",WriteIf(IBCStatus==1,"Connecting to TWS",WriteIf(IBCStatus==2,"TWS OK",WriteIf(IBCStatus==3,"TWS OK (msgs)",""))));
+//LastOrderID = StaticVarGetText("OrderID"+ABName);
+//OrderStatus = ibc.GetStatus( LastOrderID , True );
+
+if( OrderStatus != "" ) StaticVarSetText("OrderStatus"+ABName,ORderStatus);
+
+
+}
+
+Filter=(Buy OR Short OR Sell OR Cover) AND LastOrderID!="DUMMY";// AND  Status("lastbarinrange");
+AddTextColumn(FullName(),"name",200);
+AddColumn(Buy,"Buy",1.0);
+AddColumn(Short,"Short",1.0);
+AddColumn(Sell,"Sell",1.0);
+AddColumn(Cover,"Cover",1.0);
+AddColumn(IIf(SubmitOrders,Asc("Y"),Asc("N")),"Transmit",formatChar);
+AddColumn(IIf(Buy OR Cover,Asc("L"),IIf(Short OR Sell,Asc("S"),Asc(" "))),"Buy/Sell",formatChar);
+AddColumn(IIf(Buy,BuyPrice,ShortPrice),"Entry",1.2);
+AddTextColumn(IBcStatusString,"IBC Status",100);
+
+_SECTION_END();
+
+
+_SECTION_BEGIN("Alert"); 
+
+//AlertIf( Buy, "EMAIL", "Buy Alert in "+FullName()+ "@"+BuyPrice,1 );
+
+//AlertIf( Sell, "EMAIL", "Sell Alert in "+FullName()+ "@"+SellPrice,1 );
+
+//AlertIf( Short, "EMAIL", "Short Alert in "+FullName()+ "@"+ShortPrice,3 );
+
+//AlertIf( Cover, "EMAIL", "Short Alert in "+FullName()+ "@"+CoverPrice,3 );
+
+_SECTION_END();

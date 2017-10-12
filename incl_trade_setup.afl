@@ -1,0 +1,68 @@
+
+OptimizerSetEngine("cmae"); // we can use "spso" or "trib" here
+
+_SECTION_BEGIN("Trading Set up");
+//Filename = _DEFAULT_NAME();
+SubmitOrders = True; 
+Tracing = False;    
+MarketON=093000;
+US_Trade_On=TimeNum() >= 094000 AND TimeNum() <=154500;
+printf("US_Trade_On:"+"\t"+US_Trade_On+"\n");
+ABName="SPY";//IBName =Name();//getfndata("Alias");
+Bars_so_far_today = 1 + BarsSince( Day() != Ref(Day(), -1));
+_SECTION_END();
+
+_SECTION_BEGIN("VXX-prices");
+SetForeign("VXX");
+C_VXX = C;
+C_30Min_VXX=TimeFrameGetPrice("C_VXX",6*in5minute, -1);
+RestorePriceArrays();
+_SECTION_END();
+
+_SECTION_BEGIN("OPT-prices");
+SetForeign("SPY   171020C00240000-SMART-OPT");
+C_OP_call = C;
+C_30Min_call=TimeFrameGetPrice("C_OP_call",6*in5minute, -1);
+SetForeign("SPY   171020P00240000-SMART-OPT");
+C_OP_put = C;
+C_30Min_put=TimeFrameGetPrice("C_OP_put",6*in5minute, -1);
+RestorePriceArrays();
+_SECTION_END();
+
+
+_SECTION_BEGIN("SPY-Variables");
+SetForeign(ABName);
+O_SPY = O;
+H_SPY = H;
+L_SPY = L;
+C_SPY = C;
+v_SPY = IIf(V==0,1,Volume);
+RestorePriceArrays();
+
+// Useful to find state of market
+C_YDay_SPY = TimeFrameGetPrice("C_SPY", inDaily, -1); // yesterdays close https://www.amibroker.com/guide/h_timeframe.html
+H_YDay_SPY = TimeFrameGetPrice("H_SPY", inDaily, -1);
+L_YDay_SPY = TimeFrameGetPrice("L_SPY", inDaily, -1);
+C_5Min_SPY=TimeFrameGetPrice("C_SPY", in5minute, -1);// TimeFrameExpand( ma5_13, in5Minute)
+L_5Min_SPY=TimeFrameGetPrice("L_SPY",in5minute, -1);// TimeFrameExpand( ma5_13, in5Minute)
+H_5min_SPY=TimeFrameGetPrice("H_SPY",in5minute,-1);
+O_5min_SPY=TimeFrameGetPrice("O_SPY",in5minute,-1);
+C_1Min_SPY=TimeFrameGetPrice("C_SPY", in1minute, -1);
+H_1Min_SPY=TimeFrameGetPrice("H_SPY", in1minute, -1);
+L_1Min_SPY=TimeFrameGetPrice("L_SPY", in1minute, -1);
+C_30Min_SPY=TimeFrameGetPrice("C_SPY",6*in5minute, -1);
+
+L_short=12;
+L_long=60;
+
+
+_SECTION_BEGIN("LEVEL price"); 
+SP_SPY=ValueWhen(Bars_so_far_today==1,O_SPY); 
+DH=H_SPY-SP_SPY;
+DL=L_SPY-SP_SPY;
+D=O_SPY-SP_SPY;
+UL=H_YDay_SPY; // level line 1
+LL=L_YDay_SPY;// level line 2
+NL=(UL+LL)/2; // level line 3//**
+
+_SECTION_END();

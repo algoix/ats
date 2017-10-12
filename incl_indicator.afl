@@ -1,0 +1,39 @@
+_SECTION_BEGIN("indicator"); 
+
+down_count_5m=Cross(C_5Min_SPY,O_SPY);
+total_down_count_5m=Cum(down_count_5m);
+
+up_count_5m=Cross(O_SPY,C_5Min_SPY);
+total_up_count_5m=Cum(up_count_5m);
+
+market_direction=total_up_count_5m-total_down_count_5m;//***
+market_direction_D=market_direction-Ref(market_direction,-12);
+
+P_sentiment=(price-sentiment_nl);// if this is low then market upward
+P_sentiment_D=P_sentiment-Ref(P_sentiment,-12);
+//market_trend=IIf(market_increasing>0,1,IIf(market_decreasing>0,-1,0));// ==0 is between up and dn
+
+
+//C_5Min_SPY_tsf
+
+// PID 
+PID_spread_P=O_SPY-MS_spread_upward;
+//PID_spread_P
+
+/*
+predicted_line=valuewhen(Cross(B,MA(C_5Min_SPY,12)) OR Cross(MA(C_5Min_SPY,12),Cross(B,C_5Min_SPY)),O_SPY);;
+if(LastValue(time_lapsed)%5==0){
+predicted_line+=IIf(O_SPY>C_5Min_SPY,expected_movement_5m,-expected_movement_5m);}
+predicted_line+=IIf(MS_pr!=Ref(MS_pr,-1),ValueWhen(MS_pr,O_SPY)-ValueWhen(Ref(MS_pr,-1),O_SPY),0);*/
+
+predicted_line_30Min=valuewhen(Cross(C_5Min_SPY,C_30Min_SPY) OR Cross(C_30Min_SPY,C_5Min_SPY) ,O_SPY);
+if(LastValue(time_lapsed)%5==0){
+predicted_line_30Min+=IIf(P_sentiment_D==-1 OR market_direction_D==-1 ,-expected_movement_5m,
+	IIf(P_sentiment_D==1 OR market_direction_D==1,expected_movement_5m,0));
+//predicted_line_30Min+=predicted_line_30Min+expected_movement_5m*(P_sentiment_D OR market_direction_D);//**
+}
+predicted_line_30Min_=IIf(MS_pr!=Ref(MS_pr,-1),ValueWhen(MS_pr,O_SPY)-ValueWhen(Ref(MS_pr,-1),O_SPY),0);
+predicted_line_30Min_=Ref(predicted_line_30Min,1)+C_5Min_SPY_tsf;
+
+
+_SECTION_END();

@@ -1,0 +1,101 @@
+//Close_price=0;
+
+// looking ML_output.csv
+/*
+function ML_convert()
+{
+fh = fopen("C:\\Users\\Michal\\Dropbox\\ml_output.csv", "r" );
+if( fh ) 
+{ 
+   while( ! feof( fh ) ) 
+   { 
+      line = fgets( fh ); // read a line of text
+      for ( i = 0;StrExtract(line, i )!= ""; i++ ) 
+	{
+		ML_value[i]=StrToNum(StrExtract(line,i));
+		printf("value:"+"\t"+ML_value+"\n");
+	}
+      //ML_value_1=StrToNum(StrExtract(line,0));
+      //ML_value_2=StrToNum(StrExtract(line,1));
+      //ML_value_3=StrToNum(StrExtract(line,2));
+
+      
+      //printf("value:"+"\t"+ML_value+"\n");
+      
+      _TRACE(line);  
+      
+   }
+
+	fclose( fh ); 
+} 
+else 
+{ 
+   Error("ERROR: file can not be open"); 
+} 
+
+return ML_value;
+}
+
+ML_one=ML_convert();
+
+
+printf("predicted price:"+"\t"+ ML_one+"\n");
+//printf(ML_convert());
+
+*/
+
+// the input file path
+//file ="C:\\Users\\Michal\\Dropbox\\ml_output.txt";
+
+//REG_CLASSI_LSTM
+// define the size of the desired matrix
+rows = 2;
+cols = 9;
+
+// create matrix
+myMatrix = Matrix( rows, cols, 0 );
+LSTM=Matrix(1,1,0);
+REG=Matrix(1,1,0);
+KM=Matrix(1,1,0);
+VWAP=Matrix(1,1,0);
+// open file
+fh = fopen("C:\\Users\\Michal\\Dropbox\\ml_output.txt", "r" );
+
+if( fh )
+{
+    i = 0;
+    
+
+    // iterate through the lines of input file
+    for( i = 0; ! feof( fh ) AND i < rows; i++ ) 
+    {
+        // read a line of text
+        line = fgets( fh ); 
+
+        if( line == "" )
+        {
+            Error("Too few rows in the data file or an empty row found");
+            break;
+        }
+    
+        // iterate through the elements of the line
+        for( j = 0; ( item = StrExtract( line, j ) ) != "" AND j < cols; j++ ) 
+        {
+            // assign matrix element
+            myMatrix[ i ][ j ] = StrToNum( item );
+
+        }
+        /*if( j==0)
+        {
+            Error("Too few columns in data file");
+            break;
+        }*/
+    }
+    
+    fclose( fh );
+}
+else
+{
+    Error( "ERROR: file can not be opened" );
+}
+
