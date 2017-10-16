@@ -1,2 +1,2 @@
-# Quant_Trade
-R,Python and Amibroker based system
+# Only Amibroker and IBcontroller based automatic trading 
+AFL 
