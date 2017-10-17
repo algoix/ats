@@ -128,22 +128,26 @@ So trend,support and resistance concepts are used here.
 **New stocks**
 LIST 4 is used to fill manually to store buy catagory stocks. Whereas LIST 6 is used to store sell catagory stocks. Both are to be filled manually based on our stock selection method.
 Selection.afl code is first to eliminate stocks based on beta,ROC,stock and index level.
+
 	LIST 4 -> LIST 12	(BUY)
 	LIST 6 -> LIST 9 	(SELL)
 	LIST 12+ Buy strategy -> buy signal to TWS
 	LIST 9 + Sell strategy -> sell short signal to TWS
 **Holding Stocks/Portfolio**
 LIST 17 is to store the stocks in portfolio. These stocks are further catagorized based on volume. If volume of any holding stock to 25 min average of volume is in the range of 2 to 1.5 then that holding stock will be in LIST 31.
+
 	LIST 17-> LIST 30 (>2)
 	LIST 17-> LIST 31 ( 2 – 1.5)
 	LIST 17-> LIST 32 ( 1.5 – 0.8)
 	LIST 17-> LIST 33 ( <0.8)
+	
 This catagorisation helped us to set different target profit for selling the holding stocks. Here the sentiment based differention will be used later.	
 **ETFs** 
 SQQQ and TQQQ ETFs will be stored at LIST 64.
 
 Weighted Stocks
 Stocks that are special with the expectation of higher return. Like, those stocks have better expected earning then we can keep those in these lists. 
+
 	LIST 18 = Weighted BUY
 	LIST 19 = Weighted SELL
 	
