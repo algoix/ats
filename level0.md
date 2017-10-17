@@ -48,3 +48,55 @@ New trading will be stopped at 3:30PM ( 30 minutes before market closing. For la
     ABName=IBName=Name();//getfndata("Alias");
     //IBName =Name();//getfndata("Alias");
 
+#### Strategy
+1. will filter trading and momentum stocks
+
+2. Buy and sell short stocks
+    
+        filterb=B1+B2+B3+LRPup+candleAbuy;
+        filters=S1+S2+S3+LRPdown+candleAsell;
+        "FilterB"+filterb+"FilterS"+filters;
+        FB=upline AND filterb>filters+2;//filters;
+        FSS=downline AND filters>filterb+2;//filterb;
+        "BUY**"+FB+"Sell**"+FSS;
+
+3. Four parts are combined to build the strategy. 
+Candle stick based indentification ( candleAbuy or candleAsell), inbuilt indicator ( RSI,MACD...) based identification, synthetic indicators and price level based elimination( to avoid gap up/down,broken up/down price level of any stock).
+
+#### Candlestick
+
+    candlesell =   IIf(KBR OR EveningDojiStar OR EveningStar OR GraveStoneDoji OR Bear3Formation OR BearishAbandonedBaby
+        OR BearishBeltHold OR BearishCounterAttack OR BearishHaramiCross OR BearishHarami OR BearishSeparatingLine
+        OR DarkCloudCover OR EngulfingBear OR HangingMan OR ShootingStar OR ThreeBlackCrows OR TriStarBottom 
+        OR TweezerTops OR UpsideGapTwoCrows,1,0);//weight 2
+    candlebuy=IIf( MorningStar OR MorningDojiStar OR Bull3Formation
+        OR BullishAbandonedBaby OR BullishBeltHold OR BullishCounterAttack OR BullishHaramiCross
+        OR BullishHarami OR BullishSeparatingLine OR DragonflyDoji OR EngulfingBull OR Hammer OR InvertedHammer
+        OR PiercingLine OR SeperatingLines OR ThreeWhiteSoldiers OR TriStarTop OR TweezerBottoms OR KBL, 1, 0);
+        
+    candleAbuy=ICHIMOKUbuy+candlebuy; //Max value 6 and min 0
+    candleAsell=ICHIMOKUsell+candlesell;
+    "Candle Buy"+candleAbuy+"candle Sell"+candleAsell;
+
+Candle stick based elimination of stock is based on basic theory of bearish and bullish type of candles. Each candle is of 5sec.
+
+#### price level
+Another part of strategy is to eliminate stocks those are below/above the middle of peak or based on support/resistance. If downward pattern then below else with upward price pattern and less than 1.2% of peak then above.  
+    
+    downline= O<(xPK1+xTr1)/2 AND xPK1<=xPK2 ;//*
+    upline= xTr1>=xTr2 AND O>(xPK1+xTr1)/2 AND C<xPK1*1.2;
+    "xTr1"+xTr1+"xTr2"+xTr2+"xPK1"+xPK1+"xPK2"+xPK2+"Downline"+downline+"upline"+upline;
+   
+#### synthetic indicator
+
+    B1=MA(C,20)>x_est_last;
+    S1= MA(C,20)<x_est_last;
+    B2=(JJ-Ref(JJ,-1))/(C-Ref(C,-1))>0;
+    S2=(JJ-Ref(JJ,-1))/(C-Ref(C,-1))<0;
+    
+    B3=Cross( MACD(2,8 ), Signal (4,10,2 ) )+Cross( StochK( 8, 2 ), StochD( 10,2,2))+ (RSI(4)>20 AND RSI(4)<75)
+	+Cross(EMA(C,2),EMA( C,8 ))+Cross(MA(OBV(),2),MA(OBV(),8))+Cross(MA(PDI(),2),MA(MDI(),8))+Cross(CCI(2),CCI(8));
+    S3=Cross(Signal (4,10,2 ),MACD(2,8 ))+Cross(StochD( 10,2,2 ), StochK(8,2 ))+(RSI(4)>40 AND RSI(4)<90)+Cross(EMA(C,8),EMA( C,2 ))
+    +Cross(MA(OBV(),8),MA(OBV(),2))+Cross(MA(MDI(),8),MA(PDI(),2))+Cross(CCI(2),CCI(8));
+    
+    
