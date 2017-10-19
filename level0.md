@@ -151,7 +151,7 @@ Stocks that are special with the expectation of higher return. Like, those stock
 	LIST 18 = Weighted BUY
 	LIST 19 = Weighted SELL
 	
-#### Trading Signal
+##### Trading Signal
 	Buysig=(InWatchList(12)  AND FB) OR (InWatchList(18) AND O>EMA(C,12)) OR  (InWatchList(64) AND ROC(C,120)<-2 AND ROC(C,20)<ROC(C,60) AND ROC(C,4)<0) ;//AND O>valB AND O<valT;// second data 
 	Sellsig=(inwatchlist(9) AND FSS)  OR (InWatchList(19) AND C<EMA(O,12));// AND O>valT ;
 
@@ -161,5 +161,114 @@ Target percentage is based on volume profile ( <0.8 to >2 of volume to average v
 3. Target -> minimum profit target $5 for each holding. If volume is above or if we consider highly liquid then that minimum profit target increases to $12.5.
 This method is applicable to cover (minCProfit) and sell(minSProfit). 
 
-	
+##### TWS account details
+	ibc = GetTradingInterface("IB");
+	IBcStatus = ibc.IsConnected();
+	IBPosSize = ibc.GetPositionSize( IBName );
+	IBcStatusString = WriteIf(IBCStatus==0,"TWS Not Found",WriteIf(IBCStatus==1,"Connecting to TWS",WriteIf(IBCStatus==2,"TWS OK",WriteIf(IBCStatus==3,"TWS OK (msgs)",""))));
+	printf("Net Liquidity or balance:");
+	liqCAD=ibc.GetAccountValue("[CAD]NetLiquidation");
+	printf("Net Liquidation USD :");
+	CashBalanceStr = ibc.GetAccountValue("[USD]NetLiquidationByCurrency");
+	printf("Net Liquidation CAD:");
+	CashBalanceCAD = ibc.GetAccountValue("[CAD]NetLiquidationByCurrency");
+	printf("Available Funds USD:"); 
+	USDaf=ibc.GetAccountValue("[USD]AvailableFunds");
+	printf("Available Fund CAD:"); 
+	CADaf=ibc.GetAccountValue("[CAD]AvailableFunds");
+	printf("Total Cash Balance USD:"); 
+	USDtcb=ibc.GetAccountValue("[USD]TotalCashBalance");
+	printf("Total Cash Balance CAD:"); 
+	CADtcb=ibc.GetAccountValue("[CAD]TotalCashBalance");
+	printf("AvailableFunds CAD:");
+	availablefundstr=ibc.GetAccountValue("[CAD]AvailableFunds");
+	printf("Excess Liquidity CAD:");
+	excessfundstr=ibc.GetAccountValue("[CAD]ExcessLiquidity");
+	printf("MaintenanceMarginReqCAD:");
+	marginfundUSD=ibc.GetAccountValue("[CAD]MaintMarginReq");
+	printf("Equity With Loan Value CAD:");
+	loanfundUSD=ibc.GetAccountValue("[CAD]EquityWithLoanValue");
+	printf("Buying Power CAD or  excessfund:");
+	excessfundCAD=ibc.GetAccountValue("[CAD]BuyingPower");
+
+	if (liqCAD == "")
+    Balance = 0;
+	else
+    Balance = StrToNum(liqCAD);
+    
+	if (excessfundCAD =="")
+    excessfund = 0;
+	else
+   	excessfund = StrToNum(excessfundCAD);  
+   
+ 	AccountCutout =excessfund<10000; 
+CAD and USD liquidity, cash balance, total cash balance ... are visible and can be tracked from Amibroker window. This is helpful for tracking. Although excessfundCAD is used to automatic cutoff from trading when banlance of excessfund is low (below $10000 or 10% of excessfund in CAD).
+
+##### ORDER SIZE
+	function stockprice()
+	{base=1;
+	for(i=0;i<=LastValue(C);i++){
+	base++;
+	}
+	roundoff=int(base/5)*5;
+	return lastvalue(roundoff);
+	}
+
+	base=stockprice();
+	printf("\n"+"Roundoff Price"+base);
+	IBOrderSize =(int((Balance*0.01 + excessfund*0.01)/base)/100)*100;//(int((Balance*0.02 + excessfund*0.03)/base)/100)*100;
+	printf("\n"+"unfiltered Order size"+IBOrderSize);
+	ordersize=IIf(IBOrderSize<(Balance*0.085/base) AND IBOrderSize>(Balance*0.02/base) AND AccountCutout==0 ,IBOrderSize,0);
+	printf("\n"+"Maximum Order size"+Balance*0.085/base);
+	printf("\n"+"Minimum Order size"+Balance*0.02/base);
+	printf("\n"+"Actual:"+ordersize+"\n");
+	//openpos = ibc.GetPositionList(); 
+	pendinglist=ibc.GetPendingList( 0, "Pending" );  
+	averageprice=0;
+
+Stock price is first rounded off to integer. That rounded off price is used at denominator where numerator is summation of 1% balance and 1% excessfund. This oredersize is again wrapped to control low size by minimum size above 2% of balance and maximum size below 8.5% of balance.
+So order size will be reducing with reducing balance but it will be in the range of 2% of balance to 8.5% of balance.	
+
+##### STOP LOSS
+Stop loss is based on ATR range.
+
+	stoplossS=C-Max(ATR(5)*15,MA(C,200)*0.004);
+	stoplossC=C+Max(ATR(5)*15,MA(C,200)*0.004);
+
+	minSloss=(LastValue(stoplossS)-ibc.GetPositionInfo(Name(), "Avg. cost")*0.99)*abs(IBPosSize)>5;	
+  	minCloss=(LastValue(stoplossC)-ibc.GetPositionInfo(Name(), "Avg. cost")*1.01)*abs(IBPosSize)>5;
+
+Stop loss is effective only when the loss amount is above $15 for each holding either long/short. RISK control
+Time for new trading will be on from 9:40 AM to 3:30 PM but closing trading will be on for whole market time.
+Trading off due to account cutout. Account cut out is set at $10000 CAD. Later plan to off the trading at 35% of net liquidity.If fund value is $x then account cutout will be set at $0.35x.
+Controlled order size based on existing balance and excess fund. Size will be in the range of 2% of balance to 8.5% of balance.  
+Stop loss is based on ATR range to make the target dynamic, at the same time minium value is also fixed ($15) to avoid unexpected trade at narrow range of ATR.
+
+##### SIGNAL from Amibroker to TWS
+
+	if(B1 AND AccountCutout==0)  //BUY
+    {
+        OID= ibc.PlaceOrder( Name(), "BUY",Size, "MKT",0, 0, "Day", True); 
+        ORderStatus = ibc.GetStatus( OID, True);
+        if(ORderStatus == "Filled"){
+        StaticVarSetText("OrderID"+ABName,OID);
+        }
+        for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+        if (SubmitOrders)
+        {
+            for (dummy=0; dummy<40; dummy++) ibc.Sleep(50);  //Usually takes up to about a second for TWS to get acknowledgement from IB
+
+             tradetime=GetPerformanceCounter()/1000; 
+             while ((GetPerformanceCounter()/1000 - tradetime) <5) // give up after 5 seconds
+             {
+                 ibc.Reconnect();  //Refreshes ibc, and gets accurate status
+                 //ORderStatus = ibc.GetStatus( OID, True);
+                 if (ORderStatus == "PreSubmitted" || ORderStatus == "Submitted" || ORderStatus == "Filled")
+                     break;
+             }
+        }
+                     
+    }
+
+This code to transmit signal of buy/sell/short sell/cover generating from Amibroker to Interactive Broker Terminal.
 
