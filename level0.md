@@ -151,7 +151,15 @@ Stocks that are special with the expectation of higher return. Like, those stock
 	LIST 18 = Weighted BUY
 	LIST 19 = Weighted SELL
 	
-	
+#### Trading Signal
+	Buysig=(InWatchList(12)  AND FB) OR (InWatchList(18) AND O>EMA(C,12)) OR  (InWatchList(64) AND ROC(C,120)<-2 AND ROC(C,20)<ROC(C,60) AND ROC(C,4)<0) ;//AND O>valB AND O<valT;// second data 
+	Sellsig=(inwatchlist(9) AND FSS)  OR (InWatchList(19) AND C<EMA(O,12));// AND O>valT ;
+
+1. FB and FSS are strategies built on self prepared indicators, built in indicators,candle sticks and price support/resistance.
+2. Strategy and LISTs are used to send signals. Strategies for stocks,ETFs and weighted stocks are different. Those signals are used for BUY/Short Sell.  But COVER and SELL signals are based on the target percentage above average holding price. 
+Target percentage is based on volume profile ( <0.8 to >2 of volume to average volume of last 25 minutes).
+3. Target -> minimum profit target $5 for each holding. If volume is above or if we consider highly liquid then that minimum profit target increases to $12.5.
+This method is applicable to cover (minCProfit) and sell(minSProfit). 
 
 	
 
