@@ -63,3 +63,13 @@ Subscribing to ML output forwarder for trading
 
 #### TRADING
     Subscription to port:7010    
+
+
+
+### Changes
+https://github.com/algoix/Quant_Trade/blob/67f95d47acf47c565ce96106842894f69ad71216/TRADE.py
+Single page for ML,trading and plotting. 7000(pub) and 7010(sub) are used. Few LSTM like models are saved but rest were in pipeline. 
+
+https://github.com/algoix/Quant_Trade/blob/30f5609189182b6c8bce1f5b52f36d363acfa879/TRADE.py
+7000, 7020 (pub) and 7010(sub) are used.Trading was  **money = money - 400*value ** caused error so  Average,quantity are calculated. 
+
