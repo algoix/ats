@@ -105,3 +105,71 @@ To get from the state of our system to an observation, we dot the state  (β,α)
 
  https://github.com/algoix/Quant_Trade/blob/store/kf3.png
  
+Notice how much the parameters fluctuate over long periods of time. If we are basing a trading algorithm on this, such as something that involves beta hedging, it's important to have the best and most current estimate of the beta. To visualize how the system evolves through time, we plot every fifth state (linear model) below. For comparison, in black we have the line returned by using ordinary least-squares regression on the full dataset, which is very different.
+
+    # Plot data points using colormap
+sc = plt.scatter(x, y, s=30, c=colors, cmap=cm, edgecolor='k', alpha=0.7)
+cb = plt.colorbar(sc)
+cb.ax.set_yticklabels([str(p.date()) for p in x[::len(x)//9].index])
+
+    # Plot every fifth line
+    step = 5
+    xi = np.linspace(x.min()-5, x.max()+5, 2)
+    colors_l = np.linspace(0.1, 1, len(state_means[::step]))
+    for i, beta in enumerate(state_means[::step]):
+      plt.plot(xi, beta[0] * xi + beta[1], alpha=.2, lw=1, c=cm(colors_l[i]))
+    
+    # Plot the OLS regression line
+    plt.plot(xi, poly1d(np.polyfit(x, y, 1))(xi), '0.4')
+
+    # Adjust axes for visibility
+    plt.axis([244.45,244.5,244.45,244.5])
+
+    # Label axes
+    plt.xlabel('price')
+    plt.ylabel('close');
+    plt.show()
+
+    correlation in returns
+    # Get returns from pricing data
+    x_r = x.pct_change()[1:]
+    y_r = y.pct_change()[1:]
+
+    # Run Kalman filter on returns data
+    delta_r = 1e-2
+    trans_cov_r = delta_r / (1 - delta_r) * np.eye(2) # How much random walk wiggles
+    obs_mat_r = np.expand_dims(np.vstack([[x_r], [np.ones(len(x_r))]]).T, axis=1)
+    kf_r = KalmanFilter(n_dim_obs=1, n_dim_state=2, # y_r is 1-dimensional, (alpha, beta) is 2-dimensional
+                  initial_state_mean=[0,0],
+                  initial_state_covariance=np.ones((2, 2)),
+                  transition_matrices=np.eye(2),
+                  observation_matrices=obs_mat_r,
+                  observation_covariance=.01,
+                  transition_covariance=trans_cov_r)
+    state_means_r, _ = kf_r.filter(y_r.values)
+
+    # Plot data points using colormap
+    colors_r = np.linspace(0.1, 1, len(x_r))
+    sc = plt.scatter(x_r, y_r, s=30, c=colors_r, cmap=cm, edgecolor='k', alpha=0.7)
+    cb = plt.colorbar(sc)
+    cb.ax.set_yticklabels([str(p.date()) for p in x_r[::len(x_r)//9].index])
+
+    # Plot every fifth line
+    step = 5
+    xi = np.linspace(x_r.min()-4, x_r.max()+4, 2)
+    colors_l = np.linspace(0.1, 1, len(state_means_r[::step]))
+    for i, beta in enumerate(state_means_r[::step]):
+    plt.plot(xi, beta[0] * xi + beta[1], alpha=.2, lw=1, c=cm(colors_l[i]))
+
+    # Plot the OLS regression line
+    plt.plot(xi, poly1d(np.polyfit(x_r, y_r, 1))(xi), '0.4')
+
+    # Adjust axes for visibility
+    plt.axis([-0.05,0.05,-0.02, 0.02])
+
+    # Label axes
+    plt.xlabel('price_ret')
+    plt.ylabel('close_ret');
+    plt.show()
+
+https://github.com/algoix/Quant_Trade/blob/store/kf4.png
