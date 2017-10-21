@@ -27,10 +27,15 @@ https://github.com/algoix/Quant_Trade/blob/L2P0/ML.py
          import matplotlib.pyplot as plt
          from scipy import poly1d
 
-##### Saving model
+##### Loading model
 
-         from keras.models import load_model
-         model = load_model('sevensep.h5')
+Models are saved from datascience pages. Here in pipeline ARIMA and LSTM models are loaded
+         
+    arima_model_loaded = ARIMAResults.load('sevennine_arima.pkl')
+    predictions = arima_model_loaded.predict(
+
+    from keras.models import load_model
+    model = load_model('sevensep.h5')
 ---
 
          
