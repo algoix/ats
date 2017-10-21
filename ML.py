@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[5]:
+# In[1]:
 
 import zmq
 import datetime
@@ -40,25 +40,13 @@ socket_pub.bind('tcp://127.0.0.1:7010')
 port = "7000"
 # socket to talk to server
 socket_sub = context.socket(zmq.SUB)
-print ("Collecting & plotting stock prices.")
+print ("Collecting from 7000 for ML.")
 socket_sub.connect("tcp://localhost:%s" % port)
 
 socket_sub.setsockopt_string(zmq.SUBSCRIBE, u'SPY')
 
 
-# In[6]:
-
-df = pd.DataFrame()
-pdf= pd.DataFrame()
-final=pd.DataFrame()
-
-
-# In[24]:
-
-df_ml=pd.DataFrame()
-
-
-# In[98]:
+# In[49]:
 
 def preprocessing(df):
     df.bidPrice=df.loc[:,'bidPrice'].replace(to_replace=0, method='ffill')
@@ -81,8 +69,12 @@ def normalise(df,window_length=60):
     dfn=(df-df.rolling(window_length).min())/(df.rolling(window_length).max()-df.rolling(window_length).min())
     return dfn
 
-def normalise_z(df,window_length=12):
-    dfn=(df-df.rolling(window_length).mean())/(df.rolling(window_length).std())
+def normalise_(dflstm,window_length=60):
+    dfn=(dflstm-dflstm.rolling(window_length).min())/(dflstm.rolling(window_length).max()-dflstm.rolling(window_length).min())
+    return dfn
+
+def normalise_z(dflstm,window_length=60):
+    dfn=(dflstm-dflstm.rolling(window_length).mean())/(dflstm.rolling(window_length).std())
     return dfn
 
 
@@ -102,7 +94,7 @@ from statsmodels.tsa.arima_model import ARIMA
 from statsmodels.tsa.arima_model import ARIMAResults
         
 ###ARIMA preprocessing
-def arima_processing(df):
+def arima_processing():
     #data=df[['vwap','mid']]
     #df=df.dropna()
     df['Lvwap']=np.log(df.vwap)
@@ -113,20 +105,32 @@ def arima_processing(df):
     return df   
 
 ###Model is already saved from "/Dropbox/DataScience/ARIMA_model_saving.ipynb". Here loaded and added to "df_ml"
-def ARIMA_(data):
+def ARIMA_():
     ### load model
     #data=data.dropna()
     #df=data[['Lvwap','Lmid']].tail(60)
-    df_arima=data
-    predictions_mid=ARIMA_mid(df_arima.LDmid)
-    predictions_vwap=ARIMA_vwap(df_arima.LDvwap) 
-    df_arima['predictions_mid']=np.exp(float(predictions_mid[-1])+df_arima.LDmid.shift(60))
-    #df.predictions_mid=df.loc[:,'predictions_mid'].replace(to_replace='NaN', method='ffill')
-    df_arima['predictions_vwap']=np.exp(float(predictions_vwap[-1])+df_arima.LDvwap.shift(60))
-
-    df_ml['arima']=df_arima.predictions_mid+df_arima.mid-df_arima.predictions_vwap
-    return df_arima.predictions_mid+df_arima.mid-df_arima.predictions_vwap
+    #df_arima=data
+    df_arima=pd.DataFrame()
+    df_arima['mid']=df.mid
+    df_arima['LDvwap']=df.LDvwap.shift(2)
+    df_arima['LDmid']=df.LDmid.shift(2)
+    df_arima['predictions_mid']=ARIMA_mid(df.LDmid)
+    df_arima['predictions_vwap']=ARIMA_vwap(df.LDvwap) 
     
+    
+    
+    df_arima=df_arima.tail(100)
+    #df_arima['predictions_mid']=np.exp(float(predictions_mid[-1])+df_arima.LDmid.shift(60))
+    #df.predictions_mid=df.loc[:,'predictions_mid'].replace(to_replace='NaN', method='ffill')
+    #df_arima['predictions_vwap']=np.exp(float(predictions_vwap[-1])+df_arima.LDvwap.shift(60))
+    df_arima['arima']=df_arima.mid+np.exp(df_arima.predictions_vwap+df_arima.LDvwap)-np.exp(df_arima.predictions_mid+df_arima.LDmid)
+    #arima=data.mid.tail(1)+np.exp(float(predictions_vwap[-1])+data.LDvwap.shift(2)[-1])-np.exp(float(predictions_mid[-1])+data.LDmid.shift(2)[-1])
+    #df_ml['arima']=df_arima.predictions_mid+df_arima.mid-df_arima.predictions_vwap
+    #arima=df_arima.predictions_mid+df_arima.mid-df_arima.predictions_vwap
+    #return np.exp(float(predictions_vwap[-1])+data.LDvwap.shift(60))
+    #return float(predictions_vwap[-1])+data.LDvwap.shift(12)[-1]
+    #df['arima'].append(arima)
+    return df_arima
 def ARIMA_mid(data):
     ### load model
     
@@ -139,22 +143,6 @@ def ARIMA_vwap(data):
     vwap_arima_loaded = ARIMAResults.load('vwap_arima.pkl')
     predictions_vwap = vwap_arima_loaded.predict()
     return predictions_vwap   
-
-def data_class(data):
-    #df_ml=df_ml.dropna()
-    data_cl=data.tail(len(df_ml))
-    a= np.where(df_ml.mid>df_ml.km,1,0)
-    b= np.where(df_ml.mid<df_ml.km,-1,0)
-    c=np.where(df_ml.mid>df_ml.arima,1,0)
-    d=np.where(df_ml.mid<df_ml.arima,-1,0)
-    e=np.where(df_ml.mid>df_ml.REG,1,0)
-    f=np.where(df_ml.mid<df_ml.REG,-1,0)
-    g=np.where(df_ml.mid>df_ml.SVR,1,0)
-    h=np.where(df_ml.mid<df_ml.SVR,-1,0)
-    data_cl['U']=np.where(a[-1]*c[-1]*e[-1]*g[-1]==1,1,0)
-    data_cl['D']=np.where(b[-1]*d[-1]*f[-1]*h[-1]==1,-1,0)
-    data_cl=data_cl.dropna()
-    return data_cl  
 
 #### KALMAN moving average
 
@@ -182,8 +170,8 @@ def kalman_ma(data):
     # Use the observed values of the price to get a rolling mean
     state_means, _ = kf.filter(x.values)
     state_means = pd.Series(state_means.flatten(), index=x.index)
-    df_ml['km']=state_means
-    #return df_ml
+    #df_ml['km']=state_means
+    return state_means
 
 ### Linear Regression, sklearn, svm:SVR,linear_model
 import pickle
@@ -202,18 +190,23 @@ filename_svr = 'svr.sav'
 loaded_rgr_model = pickle.load(open(filename_rgr, 'rb'))
 loaded_svr_model = pickle.load(open(filename_svr, 'rb'))
 
-def strat_lr(data,df):
-    df=df.dropna()
+def strat_lr(data,dfn):
+    dfn=dfn.dropna()
     data=data.dropna()
-    X=df[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']]
-    y=df.mid
+    
+    X=dfn[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']]
+    y=dfn.mid
     predict_regr=loaded_rgr_model.predict(X)
     predict_svr=loaded_svr_model.predict(X)
-    df['predict_regr']=predict_regr
-    df['predict_svr']=predict_svr
-    df_ml['REG']=de_normalise(data.mid,df.predict_regr)
-    df_ml['SVR']=de_normalise(data.mid,df.predict_svr)
-    #return df_ml
+    data=data.tail(len(predict_regr))
+    #data['predict_regr']=predict_regr
+    #data['predict_svr']=predict_svr
+    #REG=de_normalise(data,predict_regr)
+    #SVR=de_normalise(data,predict_svr)
+    df['REG']=de_normalise(data,predict_regr)
+    df['SVR']=de_normalise(data,predict_svr)
+    #return predict_regr[-1]
+
     
 #### loading classification model from /Dropbox/DataScience/ML_20Sep
 filename_svm_model_up = 'svm_model_up.sav'
@@ -226,28 +219,21 @@ loaded_lm_up_model = pickle.load(open(filename_lm_model_up, 'rb'))
 loaded_svm_dn_model = pickle.load(open(filename_svm_model_dn, 'rb'))
 loaded_lm_dn_model = pickle.load(open(filename_lm_model_dn, 'rb'))
 
-def classification_up_dn(data):
-    X=data[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']]
-    y1=data.U
-    y2=data.D
-    
-    
+def classification_up_dn(df):
+    X=df[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']]
+    X=X.dropna()
     predict_svm_up=loaded_svm_up_model.predict(X)
     predict_lm_up=loaded_lm_up_model.predict(X)
     predict_svm_dn=loaded_svm_dn_model.predict(X)
     predict_lm_dn=loaded_lm_dn_model.predict(X)
     
-    data['predict_svm_up']=predict_svm_up
-    data['predict_lm_up']=predict_lm_up
-    data['predict_svm_dn']=predict_svm_dn
-    data['predict_lm_dn']=predict_lm_dn
+    predict_svm=predict_svm_up+predict_svm_dn
+    predict_lm=predict_lm_up+predict_lm_dn
     
-    data['predict_svm']=data.predict_svm_up+data.predict_svm_dn
-    data['predict_lm']=data.predict_lm_up+data.predict_lm_dn
-    
-    data['UD']=np.where(np.logical_and(data.predict_svm>0,data.predict_lm>0),1,np.where(np.logical_and(data.predict_svm<0,data.predict_lm<0),-1,0))  
-       
-    df_ml['UD']=data.UD
+    predict= (float(predict_svm[-1])+float(predict_lm[-1]))
+    #UD=np.where(np.logical_and(predict_svm>0,predict_lm>0),1,np.where(np.logical_and(predict_svm<0,predict_lm<0),-1,0))  
+    #df['UD']=predict_svm[-1]
+    return predict
 
 ### LSTM
 
@@ -255,9 +241,9 @@ def classification_up_dn(data):
 def lstm_processing(df):
     #df=df.dropna()
     df_price=df[['mid','vwap','arima','km','REG','SVR']]
-    #normalization
-    dfn=normalise(df_price,12)
-    dfn['UD']=df.UD
+    #df_price=df_price.dropna()
+    dfn=np.log(df_price)
+    #dfn['UD']=dflstm.UD
     return dfn
 
 
@@ -281,7 +267,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
 
 from keras.models import load_model
-model = load_model('21sep.h5')
+model = load_model('28sep.h5')
 
 # convert an array of values into a dataset matrix
 def create_dataset(dataset, look_back=1):
@@ -293,8 +279,7 @@ def create_dataset(dataset, look_back=1):
         d = dataset[i:(i+look_back), 3]
         e=  dataset[i:(i+look_back), 4]
         f = dataset[i:(i+look_back), 5]
-        g=  dataset[i:(i+look_back), 6]
-        dataX.append(np.c_[b,c,d,e,f,g])
+        dataX.append(np.c_[b,c,d,e,f])
         #dataX.append(b)
         #dataX.append(c)
         #dataX.append(d)
@@ -304,42 +289,44 @@ def create_dataset(dataset, look_back=1):
     return np.array(dataX), np.array(dataY)
 
 
-def strat_LSTM(df_lstm):
+def strat_LSTM(df):
     
     #normalization
-    #df_lstm=lstm_processing(df_ml)
-    #df_lstm=df_lstm.dropna()
-    dataset=df_lstm.values
+    df_price=df[['mid','vwap','arima','km','REG','SVR']]
+    dfn=np.log(df_price)
+    dflstm=dfn
+    dflstm=dflstm.append(dfn.tail(1), ignore_index=True)
+    dataset=dflstm.values
     dataset = dataset.astype('float32')
     # reshape into X=t and Y=t+1
     look_back = 3
     X_,Y_ = create_dataset(dataset,look_back)
-    
+    '''
     # reshape input to be [samples, time steps, features]
     X_ = numpy.reshape(X_, (X_.shape[0],X_.shape[1],X_.shape[2]))
     # make predictions
     predict = model.predict(X_)
-    df_lstm=df_lstm.tail(len(predict))
+    df_lstm=dflstm.tail(len(predict))
     df_lstm['LSTM']=predict
 
     #LSTM=(df_lstm.LSTM*(df_ml.mid.rolling(60).max()-df_ml.midClose.rolling(60).min()))+df_LSTM.Close.rolling(60).min()
-    LSTM=de_normalise(df_ml.mid,df_lstm.LSTM,window_length=12)
-    df_ml['LSTM']=LSTM
-    
-    return LSTM
+    LSTM=de_normalise(dflstm.mid,df_lstm.LSTM,window_length=12)
+    #df_ml['LSTM']=LSTM
+    '''
+    return dfn
 
 
-# In[107]:
+# In[31]:
 
-df_ml=pd.DataFrame()
-
-
-# In[108]:
-
-final=pd.DataFrame()
+df=pd.DataFrame()
 
 
-# In[114]:
+# In[47]:
+
+df_arima=pd.DataFrame()
+
+
+# In[51]:
 
 ## warm up upto preprocessing
 #final=pd.DataFrame()
@@ -354,55 +341,44 @@ for _ in range(window):
     df = df.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
     df=preprocessing(df)
     df=df.tail(200)
-    #df=df.tail(100)
+    data=df[['askPrice','askSize','bidPrice','bidSize','mid','vwap','spread','v','return','sigma']] # need to store 200 points
+    #'''
+    arima_processing()
+    df_arima=ARIMA_()
     
-    data=df[['askPrice','askSize','bidPrice','bidSize','mid','vwap','spread','v','return','sigma']]
+    #dfn=normalise(data)  #dfn=normalise_z(data)
     
-    df_ml['mid']=df.mid
-    df_ml['vwap']=df.vwap
+    #df['km']=kalman_ma(data)
+    #strat_lr(df.mid,dfn)# dfn to pass
+    #'''
+    #df['UD']=classification_up_dn(df)
+    #dflstm=df[['mid','vwap','arima','km','REG','SVR']] # need to store for 200 points
+    #dflstm=normalise(df_price)
+    #dflstm=lstm_processing(df)
+    #df_LSTM=strat_LSTM(df)
     
-    df_arima=arima_processing(df)
-    df_ml['arima']=ARIMA_(df_arima)  
-    
-    dfn=normalise(data)
-    #dfn=normalise_z(data)
-    
-    kalman_ma(data)
-    strat_lr(data,dfn)
-    
-    df_cl=data_class(data)
-    classification_up_dn(df_cl)
-    
-    df_lstm=lstm_processing(df_ml)
-    df_lstm=strat_LSTM(df_lstm.tail(60))
-    final['lstm']=df_lstm
-    final['mid']=df.mid
+    #df['lstm']=df_lstm
     #final['stock']=df.Stock
     #final.insert(loc=0, column='Stock', value=df.Stock)
     
     #df_ml.insert(loc=0, column='Stock', value=df.Stock)
     
     #print(df.tail(1))
-    #print(data.tail(1))
-    #print(df_arima.tail(1))
-    #print(df_ARIMA.tail(1))
-    #print(dfn.tail(1))
-    #print(df_cl.tail(1))
-    #print(df_lstm[-1])
-    print(df_ml.tail(1))
-    #print(final.tail(1))
- 
+    #print(UD)
+    #print(dflstm.dropna())
+    #print(df_LSTM[-1])
+    #print(df_LSTM.shape)
+    
+    print(df_arima)
+
     
     
-    #x = df_ml.to_string(header=False,index=False,index_names=False).split('\n')
+    #x = df.to_string(header=False,index=False,index_names=False).split('\n')
     #socket_pub.send_string(x[-1])
     #print(x[-1]) 
 
 
-# In[62]:
-
-len(df_ml.dropna())
+# In[ ]:
 
 
-# In[103]:
 
