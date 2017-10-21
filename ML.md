@@ -38,7 +38,16 @@ Models are saved from datascience pages. Here in pipeline ARIMA and LSTM models 
     model = load_model('sevensep.h5')
 ---
 
-         
+#### Changes
+https://github.com/algoix/Quant_Trade/blob/3f419a48ca1242d62c06f6bd337f7cccb657e411/ML.py
+1. pickle.dumps(regr_model) are used to save regression and classification model
+2. pickle.loads(svr_model) are used in same pipeline for loading models
+3. ARIMA and LSTM models are saved previously from datascience section here only loading for prediction
+https://github.com/algoix/Quant_Trade/blob/4c8c1d37788172f775d51746c067d189fadf43e3/ML.py
+1. Same structure but changes in functions but not worked well
+https://github.com/algoix/Quant_Trade/blob/f3527739a3c1ff8fc62ee2105a7be9c8cf80799d/ML.py
+1. Changes in normalization function and use of global dataframe df to store each algo result.
+
 
 
 
