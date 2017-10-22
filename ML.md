@@ -10,7 +10,7 @@ https://github.com/algoix/Quant_Trade/blob/L2P0/ML.py
          from sklearn.svm import SVC
 
 ##### PUB-SUB
-7000(sub), 7010(pub)
+7000(sub), 7010(pub). Publishing 7010 is subscribed by TRADE.
 
 ##### ARIMA
          from statsmodels.tsa.arima_model import ARIMA
