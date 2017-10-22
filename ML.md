@@ -47,7 +47,10 @@ https://github.com/algoix/Quant_Trade/blob/4c8c1d37788172f775d51746c067d189fadf4
 1. Same structure but changes in functions but not worked well
 https://github.com/algoix/Quant_Trade/blob/f3527739a3c1ff8fc62ee2105a7be9c8cf80799d/ML.py
 1. Changes in normalization function and use of global dataframe df to store each algo result.
-
-
+https://github.com/algoix/Quant_Trade/blob/1f3bf7c5f363eb5c32e4b334fb2382eb4b4b7182/ML.py
+First link uses single page for ML,plot and trade. Except that all links fail to provide complete 'df'. This dev helps to get
+a complete row but resulted a single row which is not desirable. 
+https://github.com/algoix/Quant_Trade/blob/cb82fb3151ebe5c95af1f15bf351b3c243244061/ML.py
+This dev results complete multiplw rows 
 
 
