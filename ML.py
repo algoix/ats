@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[1]:
+# In[28]:
 
 import zmq
 import datetime
@@ -40,13 +40,13 @@ socket_pub.bind('tcp://127.0.0.1:7010')
 port = "7000"
 # socket to talk to server
 socket_sub = context.socket(zmq.SUB)
-print ("Collecting from 7000 for ML.")
+print ("Collecting from <7000> for ML['mid','vwap','arima','km','REG','SVR'].")
 socket_sub.connect("tcp://localhost:%s" % port)
 
 socket_sub.setsockopt_string(zmq.SUBSCRIBE, u'SPY')
 
 
-# In[49]:
+# In[72]:
 
 def preprocessing(df):
     df.bidPrice=df.loc[:,'bidPrice'].replace(to_replace=0, method='ffill')
@@ -69,9 +69,6 @@ def normalise(df,window_length=60):
     dfn=(df-df.rolling(window_length).min())/(df.rolling(window_length).max()-df.rolling(window_length).min())
     return dfn
 
-def normalise_(dflstm,window_length=60):
-    dfn=(dflstm-dflstm.rolling(window_length).min())/(dflstm.rolling(window_length).max()-dflstm.rolling(window_length).min())
-    return dfn
 
 def normalise_z(dflstm,window_length=60):
     dfn=(dflstm-dflstm.rolling(window_length).mean())/(dflstm.rolling(window_length).std())
@@ -94,7 +91,7 @@ from statsmodels.tsa.arima_model import ARIMA
 from statsmodels.tsa.arima_model import ARIMAResults
         
 ###ARIMA preprocessing
-def arima_processing():
+def arima_processing(df):
     #data=df[['vwap','mid']]
     #df=df.dropna()
     df['Lvwap']=np.log(df.vwap)
@@ -105,32 +102,22 @@ def arima_processing():
     return df   
 
 ###Model is already saved from "/Dropbox/DataScience/ARIMA_model_saving.ipynb". Here loaded and added to "df_ml"
-def ARIMA_():
+def ARIMA_(data):
     ### load model
     #data=data.dropna()
     #df=data[['Lvwap','Lmid']].tail(60)
     #df_arima=data
-    df_arima=pd.DataFrame()
-    df_arima['mid']=df.mid
-    df_arima['LDvwap']=df.LDvwap.shift(2)
-    df_arima['LDmid']=df.LDmid.shift(2)
-    df_arima['predictions_mid']=ARIMA_mid(df.LDmid)
-    df_arima['predictions_vwap']=ARIMA_vwap(df.LDvwap) 
-    
-    
-    
-    df_arima=df_arima.tail(100)
+    predictions_mid=ARIMA_mid(data.LDmid)
+    predictions_vwap=ARIMA_vwap(data.LDvwap) 
     #df_arima['predictions_mid']=np.exp(float(predictions_mid[-1])+df_arima.LDmid.shift(60))
     #df.predictions_mid=df.loc[:,'predictions_mid'].replace(to_replace='NaN', method='ffill')
     #df_arima['predictions_vwap']=np.exp(float(predictions_vwap[-1])+df_arima.LDvwap.shift(60))
-    df_arima['arima']=df_arima.mid+np.exp(df_arima.predictions_vwap+df_arima.LDvwap)-np.exp(df_arima.predictions_mid+df_arima.LDmid)
-    #arima=data.mid.tail(1)+np.exp(float(predictions_vwap[-1])+data.LDvwap.shift(2)[-1])-np.exp(float(predictions_mid[-1])+data.LDmid.shift(2)[-1])
+    arima=data.mid.tail(1)+np.exp(float(predictions_vwap[-1])+data.LDvwap.shift(2)[-1])-np.exp(float(predictions_mid[-1])+data.LDmid.shift(2)[-1])
     #df_ml['arima']=df_arima.predictions_mid+df_arima.mid-df_arima.predictions_vwap
     #arima=df_arima.predictions_mid+df_arima.mid-df_arima.predictions_vwap
     #return np.exp(float(predictions_vwap[-1])+data.LDvwap.shift(60))
     #return float(predictions_vwap[-1])+data.LDvwap.shift(12)[-1]
-    #df['arima'].append(arima)
-    return df_arima
+    return arima
 def ARIMA_mid(data):
     ### load model
     
@@ -190,21 +177,23 @@ filename_svr = 'svr.sav'
 loaded_rgr_model = pickle.load(open(filename_rgr, 'rb'))
 loaded_svr_model = pickle.load(open(filename_svr, 'rb'))
 
-def strat_lr(data,dfn):
-    dfn=dfn.dropna()
-    data=data.dropna()
+def strat_lr(df):
+    #dfn=dfn.dropna()
+    #data=data.dropna()
     
-    X=dfn[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']]
-    y=dfn.mid
+    X=df[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']].tail(1)
+    y=df.mid.tail(1)
     predict_regr=loaded_rgr_model.predict(X)
     predict_svr=loaded_svr_model.predict(X)
-    data=data.tail(len(predict_regr))
+    #data=data.tail(len(predict_regr))
     #data['predict_regr']=predict_regr
     #data['predict_svr']=predict_svr
     #REG=de_normalise(data,predict_regr)
     #SVR=de_normalise(data,predict_svr)
-    df['REG']=de_normalise(data,predict_regr)
-    df['SVR']=de_normalise(data,predict_svr)
+    #df['REG']=de_normalise(data,predict_regr)
+    #df['SVR']=de_normalise(data,predict_svr)
+    df["REG"]=predict_regr[-1]
+    df['SVR']=predict_svr[-1]
     #return predict_regr[-1]
 
     
@@ -316,23 +305,27 @@ def strat_LSTM(df):
     return dfn
 
 
-# In[31]:
+# In[30]:
 
-df=pd.DataFrame()
+df = pd.DataFrame()
 
 
 # In[47]:
 
-df_arima=pd.DataFrame()
+dfn=pd.DataFrame()
 
 
-# In[51]:
+# In[31]:
+
+print ("publishing to  <7010> for LSTM and plot.")
+
+
+# In[ ]:
 
 ## warm up upto preprocessing
-#final=pd.DataFrame()
-window=20
-for _ in range(window):
-#while True:
+#window=20
+#for _ in range(window):
+while True:
     iterations += 1
     string = socket_sub.recv_string()
     sym, bidPrice,bidSize,askPrice,askSize = string.split()
@@ -340,45 +333,31 @@ for _ in range(window):
     dt = datetime.datetime.now()
     df = df.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
     df=preprocessing(df)
-    df=df.tail(200)
-    data=df[['askPrice','askSize','bidPrice','bidSize','mid','vwap','spread','v','return','sigma']] # need to store 200 points
-    #'''
-    arima_processing()
-    df_arima=ARIMA_()
+    df=df.tail(75)
+    data=df[['askPrice','askSize','bidPrice','bidSize','mid','vwap','spread','v','return','sigma']] # need to wait 200 points
     
-    #dfn=normalise(data)  #dfn=normalise_z(data)
+    df_arima=arima_processing(df)
+    df['arima']=ARIMA_(df_arima)  
+    df['km']=kalman_ma(data)
+    df['UD']=classification_up_dn(df)
+    #dfn=normalise(data)  # need to wait for 200 points
+    strat_lr(df)# dfn to pass
     
-    #df['km']=kalman_ma(data)
-    #strat_lr(df.mid,dfn)# dfn to pass
-    #'''
-    #df['UD']=classification_up_dn(df)
-    #dflstm=df[['mid','vwap','arima','km','REG','SVR']] # need to store for 200 points
-    #dflstm=normalise(df_price)
-    #dflstm=lstm_processing(df)
-    #df_LSTM=strat_LSTM(df)
-    
-    #df['lstm']=df_lstm
-    #final['stock']=df.Stock
-    #final.insert(loc=0, column='Stock', value=df.Stock)
-    
-    #df_ml.insert(loc=0, column='Stock', value=df.Stock)
+
+    df_ml=df[['Stock','mid','vwap','arima','km','REG','SVR','UD']] 
     
     #print(df.tail(1))
-    #print(UD)
-    #print(dflstm.dropna())
-    #print(df_LSTM[-1])
-    #print(df_LSTM.shape)
     
-    print(df_arima)
+    x = df_ml.to_string(header=False,index=False,index_names=False).split('\n')
+    socket_pub.send_string(x[-1])
+    print(x[-1]) 
 
-    
-    
-    #x = df.to_string(header=False,index=False,index_names=False).split('\n')
-    #socket_pub.send_string(x[-1])
-    #print(x[-1]) 
+
+# In[58]:
+
+df.dropna()
 
 
 # In[ ]:
-
 
 
