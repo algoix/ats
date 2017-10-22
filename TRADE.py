@@ -1,11 +1,8 @@
 
 # coding: utf-8
 
-# ### Collecting from IB, publishing and subscription to forward
+# In[70]:
 
-# In[1]:
-
-#import tpqib
 import predicsenseIB
 import datetime
 import zmq
@@ -35,10 +32,18 @@ field = ['lastTimestamp', 'askPrice', 'askSize',
          'bidPrice', 'bidSize',
          'low', 'high', 'close',
          'volume', 'lastPrice', 'lastSize', 'halted']
-#,'position','accountSummary'
 
 
-# In[2]:
+# In[71]:
+
+# Subscribing to PLOT for instant value, to use in trade
+port = "7030"
+socket_sub30 = context.socket(zmq.SUB)
+socket_sub30.connect("tcp://localhost:%s" % port)
+socket_sub30.setsockopt_string(zmq.SUBSCRIBE, u'SPY')
+
+
+# In[72]:
 
 # for streaming market data
 def send_tick(field, value):
@@ -48,6 +53,7 @@ def send_tick(field, value):
     ask_size=''
     df = pd.DataFrame()
     
+   
     if field == 'bidPrice':
         bid_price = value
         bid_size=0
@@ -94,51 +100,54 @@ request_id = conn.request_market_data(spy_contract, send_tick)
 #conn.close()      
 
 
-# In[4]:
+# In[73]:
 
-conn.cancel_market_data(request_id)
-conn.close()   
-
-
-# In[12]:
-
-#pos=conn.req_positions().to_string(header=False,index=False,index_names=False).split('\n')
-#socket_pub1.send_string(pos[-1])
+#conn.cancel_market_data(request_id)
+#conn.close()
 
 
-# In[17]:
+# In[75]:
 
 pos=conn.req_positions()
-
-
-# In[25]:
-
-conn.req_positions()
-
-
-# In[38]:
-
 average=pos[pos['sym']=='SPY'].tail(1).avgCost
-
-
-# In[39]:
-
 quantity=pos[pos['sym']=='SPY'].tail(1).quantity
 
 
-# ### Trading
+# ### TRADING
 
-# In[62]:
+# #### Subscription to port:7010
 
+# In[24]:
 
-
-
-# ##### Subscription to port:7010
-
-# In[74]:
-
+#test
+'''
 import numpy as np
 df = pd.DataFrame()
+## warm up upto preprocessing
+#final=pd.DataFrame()
+money = 120000
+buy_cover_order = conn.create_order('MKT',400, 'Buy')
+sell_Short_order = conn.create_order('MKT',400, 'Sell')
+window=10
+for _ in range(window):
+#while True:
+    #iterations += 1
+    # after forwarder's start
+    ml=socket_sub.recv_string()
+    sym,close,price,km,arima,UD,LSTM = ml.split()
+    dt = datetime.datetime.now()
+    df = df.append(pd.DataFrame({'close': float(close),'price': float(price),'km': float(km),'arima': float(arima),'LSTM':float(LSTM)},index=[dt]))
+    print(df.tail(1))
+'''    
+    
+
+
+# In[ ]:
+
+import numpy as np
+import time
+df = pd.DataFrame()
+df_val=pd.DataFrame()
 ## warm up upto preprocessing
 #final=pd.DataFrame()
 money = 120000
@@ -149,53 +158,74 @@ sell_Short_order = conn.create_order('MKT',400, 'Sell')
 while True:
     #iterations += 1
     # after forwarder's start
+    val=socket_sub30.recv_string()
+    sym,val=val.split()
+    dt = datetime.datetime.now()
+    df_val = df_val.append(pd.DataFrame({'close': float(val)},index=[dt]))
+
     ml=socket_sub.recv_string()
     sym,close,price,km,arima,UD,LSTM = ml.split()
     dt = datetime.datetime.now()
     df = df.append(pd.DataFrame({'close': float(close),'price': float(price),'km': float(km),'arima': float(arima),'LSTM':float(LSTM)},index=[dt]))
     
-    global money
     global request_id
     
-    value=float(df.close.tail(1))
-        
-    #if df.close>df.km and df.arima>df.arima.shift(1) and df.LSTM>df.LSTM.shift(1):
-    if np.where(df.price.tail(1)>df.km.tail(1),1,0)==1 and np.where(df.close.tail(1)>df.arima.shift(1).tail(1),1,0)==1:
-        
-        if money==120000:
-            print('400 shares cost %s USD, I have %s USD, so .. '% (400 * value, money))
-            print('I buy!')
-            conn.place_order(spy_contract, buy_cover_order)
-            money = money - 400*value
-        if  400* value> money:
-            print('I quit')
-            conn.cancel_market_data(request_id)
+    value=float(df_val.close.tail(1))
+    pos=conn.req_positions()
+    #print(pos)
+    average=pos[pos['sym']=='SPY'].tail(1).avgCost
+    quantity=pos[pos['sym']=='SPY'].tail(1).quantity
     
-    if np.where(df.price.tail(1)<df.km.tail(1),1,0)==1 and np.where(df.km.tail(1)<df.arima.shift(1).tail(1),1,0)==1:
+    df_val['quantity']=float(quantity)
+    df_val['average']=float(average)
+    #df_val['trade']=0
+    
+    #data['trade']=0
+    
+    B=np.where(df.close.tail(1)>df.arima.shift(1).tail(1),1,0)==1 and    np.where(df.price.tail(1)>df.km.tail(1),1,0)==1 and np.where(df.close.tail(1)>df.LSTM.shift(1).tail(1),1,0)==1
+    SH=np.where(df.close.tail(1)<df.arima.shift(1).tail(1),1,0)==1 and    np.where(df.price.tail(1)<df.km.tail(1),1,0)==1 and np.where(df.close.tail(1)<df.LSTM.shift(1).tail(1),1,0)==1
+    C=np.where(df.price.tail(1)>df.km.tail(1),1,0)==1
+    S=np.where(df.price.tail(1)<df.km.tail(1),1,0)==1
+    
+
+       
+    #if df.close>df.km and df.arima>df.arima.shift(1) and df.LSTM>df.LSTM.shift(1):
+    if np.where(df.close.tail(1)-df.arima.shift(1).tail(1)<0.05) and B and float(quantity)==0:
+        #print('400 shares cost %s USD, I have %s USD, so .. '% (400 * value, money))
+        print('I buy!')
+        conn.place_order(spy_contract, buy_cover_order)
+        #df_val['trade']='B'
+        #time.sleep( 20 )
+
+    if S and float(quantity)>=800 and np.where(df_val.close>(float(average)+0.04)):
         print('I sell!')
         conn.place_order(spy_contract,sell_Short_order)
-        #money = money - 400* value
-        money = 120000
+        #df_val['trade']='S'
+        #time.sleep( 20 )
+            #money = money+400* value
+            #money = 120000
 
-    if np.where(df.price.tail(1)<df.km.tail(1),1,0)==1 and np.where(df.close.tail(1)<df.arima.shift(1).tail(1),1,0)==1:
-        
-        if money==120000:
-            print('400 shares cost %s USD, I have %s USD' % (400* value, money))
-            print('I short!')
-            conn.place_order(spy_contract,sell_Short_order)
-            money = money - 400*value
-        if 400 * value>money:
-            print('I quit')
-            conn.cancel_market_data(request_id)
+    if  np.where(df.arima.shift(1).tail(1)-df.close.tail(1)<0.05) and SH and float(quantity)==0:
+        #print('400 shares cost %s USD, I have %s USD' % (400* value, money))
+        print('I short!')
+        conn.place_order(spy_contract,sell_Short_order)
+        #time.sleep( 20 )
+        #df_val['trade']='SH'
     
     #if df.close<df.km and df.arima>df.arima.shift(1) and df.LSTM>df.LSTM.shift(1):
-    if np.where(df.price.tail(1)>df.km.tail(1),1,0)==1 and np.where(df.km.tail(1)>df.arima.shift(1).tail(1),1,0)==1:
+    if C and float(quantity)<=-800 and np.where(df_val.close<(float(average)-0.04)):
         print('I cover!')
         conn.place_order(spy_contract,buy_cover_order)
-        money = 120000
-      
-    df['money']=money
-    print(df.tail(1))
+        #time.sleep( 20 )
+        #df_val['trade']='C'
+    #else:
+        #df_val['trade']=0 
+    
+
+    #print(df_val.tail(1))
+    #print(df_val.tail(1))
+    x = df_val.to_string(header=False,index=False,index_names=False).split('\n')
+    print(x[-1])
 
 
 # In[ ]:
