@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[70]:
+# In[1]:
 
 import predicsenseIB
 import datetime
@@ -34,7 +34,7 @@ field = ['lastTimestamp', 'askPrice', 'askSize',
          'volume', 'lastPrice', 'lastSize', 'halted']
 
 
-# In[71]:
+# In[2]:
 
 # Subscribing to PLOT for instant value, to use in trade
 port = "7030"
@@ -43,7 +43,7 @@ socket_sub30.connect("tcp://localhost:%s" % port)
 socket_sub30.setsockopt_string(zmq.SUBSCRIBE, u'SPY')
 
 
-# In[72]:
+# In[3]:
 
 # for streaming market data
 def send_tick(field, value):
@@ -100,47 +100,22 @@ request_id = conn.request_market_data(spy_contract, send_tick)
 #conn.close()      
 
 
-# In[73]:
+# In[4]:
 
 #conn.cancel_market_data(request_id)
 #conn.close()
 
 
-# In[75]:
+# In[6]:
 
 pos=conn.req_positions()
 average=pos[pos['sym']=='SPY'].tail(1).avgCost
 quantity=pos[pos['sym']=='SPY'].tail(1).quantity
 
 
-# ### TRADING
+# ## TRADING
 
 # #### Subscription to port:7010
-
-# In[24]:
-
-#test
-'''
-import numpy as np
-df = pd.DataFrame()
-## warm up upto preprocessing
-#final=pd.DataFrame()
-money = 120000
-buy_cover_order = conn.create_order('MKT',400, 'Buy')
-sell_Short_order = conn.create_order('MKT',400, 'Sell')
-window=10
-for _ in range(window):
-#while True:
-    #iterations += 1
-    # after forwarder's start
-    ml=socket_sub.recv_string()
-    sym,close,price,km,arima,UD,LSTM = ml.split()
-    dt = datetime.datetime.now()
-    df = df.append(pd.DataFrame({'close': float(close),'price': float(price),'km': float(km),'arima': float(arima),'LSTM':float(LSTM)},index=[dt]))
-    print(df.tail(1))
-'''    
-    
-
 
 # In[ ]:
 
@@ -153,9 +128,9 @@ df_val=pd.DataFrame()
 money = 120000
 buy_cover_order = conn.create_order('MKT',400, 'Buy')
 sell_Short_order = conn.create_order('MKT',400, 'Sell')
-#window=10
-#for _ in range(window):
-while True:
+window=10
+for _ in range(window):
+#while True:
     #iterations += 1
     # after forwarder's start
     val=socket_sub30.recv_string()
@@ -226,8 +201,3 @@ while True:
     #print(df_val.tail(1))
     x = df_val.to_string(header=False,index=False,index_names=False).split('\n')
     print(x[-1])
-
-
-# In[ ]:
-
-
