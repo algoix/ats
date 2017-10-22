@@ -74,4 +74,6 @@ https://github.com/algoix/Quant_Trade/blob/30f5609189182b6c8bce1f5b52f36d363acfa
 7000, 7020 (pub) and 7010(sub) are used.Trading was  **money = money - 400*value ** caused error so  Average,quantity are calculated. 
 https://github.com/algoix/Quant_Trade/blob/31ff204b9007777f42d40cd011e12d243ff7909d/TRADE.py
 predicsenseIB is to trade and import mktdata, imported. https://github.com/algoix/Quant_Trade/blob/L2P0/predicsenseIB.py. Average and Quantity are used in strategy.
+https://github.com/algoix/Quant_Trade/blob/ecabcb7e5655194034a2eef93d6a850790c032c9/TRADE.py
+Changes in strategy
 
