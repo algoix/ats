@@ -1,0 +1,98 @@
+import pandas as pd
+import numpy as np
+import urllib2
+import urllib
+import datetime
+import datetime as dt
+from datetime import datetime
+from pytz import timezone
+import pytz
+from time import gmtime, strftime
+import time
+import os
+from random import randint
+import math
+from pandas_datareader import data as web
+import seaborn as sns; sns.set()
+import matplotlib.pyplot as plt
+from matplotlib.pylab import rcParams
+rcParams['figure.figsize'] = 40,15
+%matplotlib inline
+
+
+def get_google_data(symbol, period, window):
+    url_root = 'http://www.google.com/finance/getprices?i='
+    url_root += str(period) + '&p=' + str(window)
+    url_root += 'd&f=d,o,h,l,c,v&df=cpct&q=' + symbol
+    response = urllib2.urlopen(url_root)
+    data = response.read().split('\n')
+    #actual data starts at index = 7
+    #first line contains full timestamp,
+    #every other line is offset of period from timestamp
+    parsed_data = []
+    anchor_stamp = ''
+    end = len(data)
+    for i in range(7, end):
+        cdata = data[i].split(',')
+        if 'a' in cdata[0]:
+            #first one record anchor timestamp
+            anchor_stamp = cdata[0].replace('a', '')
+            cts = int(anchor_stamp)
+        else:
+            try:
+                coffset = int(cdata[0])
+                cts = int(anchor_stamp) + (coffset * period)
+                parsed_data.append((dt.datetime.fromtimestamp(float(cts)), float(cdata[1]), float(cdata[2]), float(cdata[3]), float(cdata[4]), float(cdata[5])))
+            except:
+                pass # for time zone offsets thrown into data
+    df = pd.DataFrame(parsed_data)
+    df.columns = ['ts', 'o', 'h', 'l', 'c', 'v']
+    df.index = df.ts
+    del df['ts']
+    return df
+    
+# another function
+def google_finance_datareader(symbol, interval_seconds, num_days):
+    url_string = "http://www.google.com/finance/getprices?q={symbol}".format(symbol=symbol.upper())
+    url_string += "&i={interval_seconds}&p={num_days}d&f=d,o,h,l,c,v".format(interval_seconds=interval_seconds, num_days=num_days)
+    #print(url_string)
+    page = urllib.urlopen(url_string)
+    df = pd.read_csv(page, skiprows=7, sep=',', names=['DATE', 'CLOSE', 'HIGH', 'LOW', 'OPEN', 'VOLUME'])
+    b_dateround = df['DATE'].map(lambda dt: dt[0]=='a')
+    dateround = df[b_dateround]['DATE'].map(lambda dt: int(dt[1:]))
+    df['DATE2'] = dateround
+    df['DATE2'] = df['DATE2'].fillna(method='ffill')
+    df['DATE3'] = df[~b_dateround]['DATE'].astype(int)*interval_seconds
+    df['DATE3'] = df['DATE3'].fillna(0)
+    df['DATE4'] = df['DATE2'] + df['DATE3']
+    df['DATE4'] = df['DATE4'].map(lambda s: dt.datetime.fromtimestamp(int(s), pytz.UTC))
+    del df['DATE']
+    del df['DATE2']
+    del df['DATE3']
+    df = df.set_index('DATE4', verify_integrity=True)
+    df.index.name = 'DATE'
+    return(df)
+ 
+spy = get_google_data('SPY',60, 1)
+spxs = get_google_data('SPXS',60,1)
+spxl = get_google_data('SPXL',60,1)
+#uwti = get_google_data('UWTI',60, 10)
+"""sqqq = get_google_data('SQQQ',60, 10)
+vxx = get_google_data('VXX',60, 10)
+dia= get_google_data('DIA',60, 10)
+ndx= get_google_data('NDX',60, 10)
+oex= get_google_data('OEX',60, 10)
+xle= get_google_data('XLE',60, 10)
+xlf= get_google_data('XLF',60, 10)
+xlv= get_google_data('XLV',60, 10)
+xly= get_google_data('XLY',60, 10)
+xli= get_google_data('XLI',60, 10)"""
+#spy.to_csv('/home/octo/Dropbox/G_data/spy.csv',sep=',')
+#spxs.to_csv('/home/octo/Dropbox/G_data/spxs.csv',sep=',')
+#spxl.to_csv('/home/octo/Dropbox/G_data/spxl.csv',sep=',')
+
+symbol = 'spy'
+interval_seconds = 60
+num_days = 30
+df = google_finance_datareader(symbol, interval_seconds, num_days)
+
