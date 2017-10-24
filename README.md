@@ -1,5 +1,4 @@
 # Python ML input to Amibroker
-https://github.com/algoix/Quant_Trade/blob/12f8ad4b068aa83c16f2d6d84d098792731baaaf/ML.py
 
                                   price        pREG        pSVR       class  \
     2017-09-06 20:51:10.712978  246.869785  246.871884  246.867284    0.0   
@@ -22,3 +21,10 @@ A part of AFL shows to import the ML output
         ...
 https://github.com/algoix/Quant_Trade/blob/L1/incl_import.afl        
     
+
+Two changes of the python ML code here:
+
+https://github.com/algoix/Quant_Trade/blob/12f8ad4b068aa83c16f2d6d84d098792731baaaf/ML.py
+
+
+https://github.com/algoix/Quant_Trade/blob/ad3f3fe3211b07fb25fa6d6ae46a6d4aec295ccf/ML.py
