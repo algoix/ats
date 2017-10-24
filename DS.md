@@ -23,20 +23,20 @@ https://github.com/algoix/Quant_Trade/blob/cb82fb3151ebe5c95af1f15bf351b3c243244
 ## Saving models
 ##### ARIMA
 
-vwap_arima.pkl
-mid_arima.pkl
+    vwap_arima.pkl
+    mid_arima.pkl
 
 ##### Regression model
-rgr.sav
-svr.sav
+    rgr.sav
+    svr.sav
 
 ##### Classification model
-svm_model_up.sav
-lm_model_up.sav
-svm_model_dn.sav
-lm_model_dn.sav
+    svm_model_up.sav
+    lm_model_up.sav
+    svm_model_dn.sav
+    lm_model_dn.sav
 
 ##### LSTM 
-28sep.h5
+    28sep.h5
 
 https://github.com/algoix/Quant_Trade/blob/7b290ac8233ac5fbd2c34e155408b821477fe35d/model_saving.py
