@@ -7,7 +7,7 @@
         expected_price=IIf(MA(O_SPY,12)>C_1Min_SPY,C_1Min_SPY+0.01,C_1Min_SPY-0.01);
 
 ##### Expected market line
-If market below this line then market down.
+If market below 'expected_market_price' then market down.
 
         starting_price=ValueWhen(Bars_so_far_today==500,O_SPY); 
         expected_change=(H_YDay_SPY-L_YDay_SPY)/400;
