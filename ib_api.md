@@ -176,3 +176,18 @@ https://stackoverflow.com/questions/43055012/ibpy-getting-my-market-position
             print(','.join(map(str, p.values())))
 
         sys.exit(0)  # Ensure ib thread is terminated
+
+### Reference
+
+`https://quant.stackexchange.com/search?q=interactive+broker
+https://interactivebrokers.github.io/tws-api/ibalgos.html#gsc.tab=0
+http://interactivebrokers.github.io/tws-api/ibalgos.html#vwap
+https://groups.io/g/twsapi
+https://github.com/anthonyng2/ib/blob/master/IBWrapper.py
+https://github.com/erdewit/ib_insync
+https://github.com/erdewit/tws_async
+https://qoppac.blogspot.in/2017/03/getting-position-and-accounting-data.html
+https://github.com/anthonyng2/ib
+https://github.com/robcarver17
+https://github.com/dabeaz/curio
+www.ibridgepy.com can be useful later.`
