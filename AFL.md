@@ -6,8 +6,19 @@
 
         expected_price=IIf(MA(O_SPY,12)>C_1Min_SPY,C_1Min_SPY+0.01,C_1Min_SPY-0.01);
 
+Other synthetic price lines are
+
+        price=(Ref(H_SPY,-1)+Ref(L_SPY,-1)+Ref(C_SPY,-1))/3;
+        //VWAP spread indicator with steer 
+        totalVolume = Sum(Ref(v_SPY,-1),60);
+        VWAP = Sum (price *Ref(v_SPY,-1),60) /totalVolume;
+
+        upside_state_price=ValueWhen(Cross(price,VWAP),O_SPY);
+        downside_state_price=ValueWhen(Cross(VWAP,price),O_SPY);
+        short_state_price=IIf(price>VWAP,upside_state_price,downside_state_price);
+
 ##### Expected market line
-If market below 'expected_market_price' then market down.
+If market below `expected_market_price` then market down.
 
         starting_price=ValueWhen(Bars_so_far_today==500,O_SPY); 
         expected_change=(H_YDay_SPY-L_YDay_SPY)/400;
@@ -24,6 +35,8 @@ If market below 'expected_market_price' then market down.
         expected_change_np=IIf(starting_price>C_YDay_SPY,expected_change,-1*expected_change);
         expected_market_price=expected_market_price+i*expected_change_np;
         }
+
+
 
 
 ##### sentiment_upline and sentiment_dnline
