@@ -1,4 +1,4 @@
-##### Expected price
+##### Expected price, short market state
 1. short market state `price>VWAP`
 2.  expected_change = last day's high-low difference per minute plus todays price change from starting price at 50th bar per minute.
 3. short market state above or blow 5 min line `C_5Min_SPY_tsf` then add/substract
@@ -19,6 +19,13 @@
         expected_change=(C_1Min_SPY-starting_price)/time_lapsed +((H_YDay_SPY-H_YDay_SPY)/2)/400;
         C_5Min_SPY_tsf=TSF(C_5Min_SPY,12);
         expected_price=IIf(short_state_price>C_5Min_SPY_tsf,C_1Min_SPY+expected_change,C_1Min_SPY-expected_change);
+
+##### long_state_price
+
+        B=(HHV(H_5min_SPY,12) + HHV(H_1Min_SPY-L_1Min_SPY,60)+LLV(L_5Min_SPY,12) + LLV(H_1Min_SPY-L_1Min_SPY,60))/2;
+        upside_state_price=ValueWhen(Cross(C_5Min_SPY,B),O_SPY);
+        downside_state_price=ValueWhen(Cross(B,C_5Min_SPY),O_SPY);
+        long_state_price=IIf(C_5Min_SPY>B,upside_state_price,downside_state_price);
 
 ##### Expected market line
 If market below `expected_market_price` then market down.
