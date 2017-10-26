@@ -47,3 +47,11 @@ During market python code IB_data_analysis.ipynb will be used for analysis.
 https://gist.github.com/parthasen/2c0c6aca00d8fd005e9523f4d874ba41
 https://github.com/parthasen/ALGO/blob/func/IB_BAIVV.py
 
+### Before starting these codes at console we need to run :
+1. activate ALGO3
+2. cd c:\Users\Michal\Dropbox\IB-ZMQ
+3. python tpqib_data_save.py
+
+### Need to close the terminal to stop running the code.
+OI and option, future data as feature 
+Bid,Ask,Bid Size and Ask Size are used for trading signal genration. These internal features will make the signal stronger.
