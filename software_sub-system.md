@@ -33,3 +33,24 @@ Old version of iqfeed can be from :
 ![R code](https://github.com/algoix/Quant_Trade/blob/store/dwnld_R.jpg)
 
 ![Downloading data from Iqfeed: SPY...](https://github.com/algoix/Quant_Trade/blob/store/dwnld_iqfeed.jpg)
+
+### Loading softwares at Ubuntu Backend System (x64) :
+1. Python and conda
+2. R
+3. TWS
+4. TWS API with  guildelines
+3. importing data from Win10 system
+4. Data Analysis and Data Science
+5. Machine Learning
+6. Backtesting
+
+### IB-ZMQ folder:
+
+1. tpqib_serv.ipyb [ tpqib_serv.py is runnung at back side]. Why console is not working?
+2. tpqib_data_save.py running at console to save csv data at desktop.
+3. tpqib_ma_strategy.py to run at console
+4. tpqib_strategy_prac.ipynb is to develop strategy
+
+### DataScience folder:
+All files in this folder to use for backtesting and offline research
+
