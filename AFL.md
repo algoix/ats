@@ -49,5 +49,24 @@ If market below `expected_market_price` then market down.
 
 
 
-##### sentiment_upline and sentiment_dnline
+##### VXX and OPT based sentiment line
 
+        sentiment_vxx=C_VXX;
+        sentimetn_pc=C_OP_put/C_OP_call;
+
+        sentiment_vxx_ma=MA(sentiment_vxx,60);
+        sentimetn_pc_ma=MA(sentimetn_pc,360);
+
+        sentiment_vxx_HHV=HHV(sentiment_vxx_ma,360);
+        sentiment_vxx_LLV=LLV(sentiment_vxx_ma,360);
+
+        MS_VXX_up=ValueWhen(Cross(sentiment_vxx_LLV,sentiment_vxx),C_SPY);//**
+        MS_VXX_dn=ValueWhen(Cross(sentiment_vxx,sentiment_vxx_HHV),C_SPY);//**
+
+        MS_pc_up=ValueWhen(Cross(sentimetn_pc_ma-0.02,sentimetn_pc),C_SPY);//**
+        MS_pc_dn=ValueWhen(Cross(sentimetn_pc,sentimetn_pc_ma+0.02),C_SPY);//**
+
+
+        sentiment_upline=ValueWhen(Cross(O_SPY,MS_VXX_up) OR Cross(O_SPY,MS_pc_up),O_SPY);//Max(MS_VXX_up,MS_pc_up);//green
+        sentiment_dnline=ValueWhen(Cross(MS_VXX_dn,O_SPY) OR Cross(MS_pc_dn,O_SPY),O_SPY);//Min(MS_VXX_dn,MS_pc_dn);//red
+        sentiment_nl=(sentiment_upline+sentiment_dnline)/2; // used at incl_indicator
