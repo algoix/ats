@@ -30,4 +30,6 @@ Old version of iqfeed can be from :
 	https://cran.cnr.berkeley.edu/
 
 8. Downloading IB data during Market time: Ibdata_download.R or Code for Step 3
+![R code](https://github.com/algoix/Quant_Trade/blob/store/dwnld_R.jpg)
+
 ![Downloading data from Iqfeed: SPY...](https://github.com/algoix/Quant_Trade/blob/store/dwnld_iqfeed.jpg)
