@@ -1,9 +1,9 @@
 ##### MARKET STATE == MS. No trade at 0 state . MS==4 is extremely up and 1 is extremely down
-UL=H_YDay_SPY; // level line 1
-LL=L_YDay_SPY;// level line 2
-NL=(UL+LL)/2; // level line 3
-MS_pr=IIf(O_SPY>=UL,4,IIf(O_SPY>=NL AND O_SPY<UL,3,IIf(O_SPY<NL AND O_SPY>=LL,2,IIf(O_SPY<LL,1,0))));//***
-printf("MS_pr:"+"\t"+MS_pr+"\n");
+        UL=H_YDay_SPY; // level line 1
+        LL=L_YDay_SPY;// level line 2
+        NL=(UL+LL)/2; // level line 3
+        MS_pr=IIf(O_SPY>=UL,4,IIf(O_SPY>=NL AND O_SPY<UL,3,IIf(O_SPY<NL AND O_SPY>=LL,2,IIf(O_SPY<LL,1,0))));//***
+        printf("MS_pr:"+"\t"+MS_pr+"\n");
 
 ##### Expected price, short market state
 1. short market state `price>VWAP`
