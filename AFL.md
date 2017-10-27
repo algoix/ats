@@ -70,3 +70,15 @@ If market below `expected_market_price` then market down.
         sentiment_upline=ValueWhen(Cross(O_SPY,MS_VXX_up) OR Cross(O_SPY,MS_pc_up),O_SPY);//Max(MS_VXX_up,MS_pc_up);//green
         sentiment_dnline=ValueWhen(Cross(MS_VXX_dn,O_SPY) OR Cross(MS_pc_dn,O_SPY),O_SPY);//Min(MS_VXX_dn,MS_pc_dn);//red
         sentiment_nl=(sentiment_upline+sentiment_dnline)/2; // used at incl_indicator
+
+##### VELOCITY
+
+when Low_velocity_price_upward=ref(Low_velocity_price_upward,-1) and O_SPY>Low_velocity_price_upward then buy
+
+                velocity=Sum(IIf((O_SPY-Ref(O_SPY,-60))/0.05>1,1,IIf((O_SPY-Ref(O_SPY,-60))/-0.05>1,-1,0)),60);
+                high_velocity=HHV(velocity,300);
+                low_velocity=LLV(velocity,300);
+                High_velocity_price_dnward=ValueWhen(Cross(ValueWhen(velocity<(high_velocity-5),O_SPY),O_SPY),O_SPY);
+                Low_velocity_price_upward=ValueWhen(Cross(ValueWhen(velocity>(low_velocity+5),O_SPY),O_SPY),O_SPY);
+                printf("High_velocity_price_dnward:"+"\t"+High_velocity_price_dnward+"\n");
+                printf("Low_velocity_price_upward:"+"\t"+Low_velocity_price_upward+"\n");
