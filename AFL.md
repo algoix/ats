@@ -89,3 +89,12 @@ when Low_velocity_price_upward=ref(Low_velocity_price_upward,-1) and O_SPY>Low_v
                 Low_velocity_price_upward=ValueWhen(Cross(ValueWhen(velocity>(low_velocity+5),O_SPY),O_SPY),O_SPY);
                 printf("High_velocity_price_dnward:"+"\t"+High_velocity_price_dnward+"\n");
                 printf("Low_velocity_price_upward:"+"\t"+Low_velocity_price_upward+"\n");
+
+##### Handling portfolio
+
+list 0: SPY, index based trading both momentum and reversion
+list 1:any index other than SPY
+list 2:3x OIL when oil is in trend, so only momentum strategy
+list 3:3x index 
+List 4: sector specific stocks in trend momentum strategy
+list5: Stocks bullish
