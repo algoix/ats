@@ -5,15 +5,33 @@
         MS_pr=IIf(O_SPY>=UL,4,IIf(O_SPY>=NL AND O_SPY<UL,3,IIf(O_SPY<NL AND O_SPY>=LL,2,IIf(O_SPY<LL,1,0))));//***
         printf("MS_pr:"+"\t"+MS_pr+"\n");
 
+##### Price and VWAP
+        price=(Ref(H_SPY,-1)+Ref(L_SPY,-1)+Ref(C_SPY,-1))/3;
+        //VWAP spread indicator with steer 
+        totalVolume = Sum(Ref(v_SPY,-1),60);
+        VWAP = Sum (price *Ref(v_SPY,-1),60) /totalVolume;
+
+##### PIVOTS
+	
+Pivots to get ACTIVE,TRADE/TREND,JU/JD situation
+
+        price=(Ref(H_SPY,-1)+Ref(L_SPY,-1)+Ref(C_SPY,-1))/3;
+        R1=price*2-Ref(L_SPY,-1);
+        R2=price+(Ref(H_SPY,-1)-Ref(L_SPY,-1));
+        S1=price*2-Ref(H_SPY,-1);
+        S2=price-(Ref(H_SPY,-1)-Ref(L_SPY,-1));
+        //#tigger line TR
+        totalVolume = Sum(Ref(v_SPY,-1),12);
+        VWAP = Sum (price *Ref(v_SPY,-1),12) /totalVolume;
+        R3=VWAP+(HHV(H_SPY,360)-LLV(L_SPY,360))*0.01;
+        S3=VWAP-(HHV(H_SPY,360)-LLV(L_SPY,360))*0.01;
+
 ##### Expected price, short market state
 1. short market state `price>VWAP`
 2.  expected_change = last day's high-low difference per minute plus todays price change from starting price at 50th bar per minute.
 3. short market state above or blow 5 min line `C_5Min_SPY_tsf` then add/substract
 
-        price=(Ref(H_SPY,-1)+Ref(L_SPY,-1)+Ref(C_SPY,-1))/3;
-        //VWAP spread indicator with steer 
-        totalVolume = Sum(Ref(v_SPY,-1),60);
-        VWAP = Sum (price *Ref(v_SPY,-1),60) /totalVolume;
+
         upside_state_price=ValueWhen(Cross(price,VWAP),O_SPY);
         downside_state_price=ValueWhen(Cross(VWAP,price),O_SPY);
         short_state_price=IIf(price>VWAP,upside_state_price,downside_state_price);
@@ -52,9 +70,6 @@ If market below `expected_market_price` then market down.
         expected_change_np=IIf(starting_price>C_YDay_SPY,expected_change,-1*expected_change);
         expected_market_price=expected_market_price+i*expected_change_np;
         }
-
-
-
 
 ##### VXX and OPT based sentiment line
 
@@ -105,14 +120,12 @@ List 4: sector specific stocks in trend momentum strategy
 list5: Stocks bullish
 
 ##### Angle
-pi=4*atan(1);
-pi=4*tan(1);
-RTD=180/pi;
-angle=RTD*LinRegSlope(O_SPY,12);
-angleUD=IIf(angle>HHV(angle,5),1,IIf(angle<LLV(angle,5),-1,0));
-printf("angle UD:"+"\t"+angleUD+"\n");
-
-
-
-
+        pi=4*atan(1);
+        pi=4*tan(1);
+        RTD=180/pi;
+        angle=RTD*LinRegSlope(O_SPY,12);
+        angleUD=IIf(angle>HHV(angle,5),1,IIf(angle<LLV(angle,5),-1,0));
+        printf("angle UD:"+"\t"+angleUD+"\n");
+        plot(angle,"angle",colorLime,styleLeftAxisScale); 
+        plot(angleUD,"angleUD",colorLime,styleLeftAxisScale); 
 
