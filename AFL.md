@@ -103,3 +103,8 @@ list 3:3x index
 List 4: sector specific stocks in trend momentum strategy
 
 list5: Stocks bullish
+
+##### Angle
+pi=4*atan(1);
+
+
