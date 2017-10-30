@@ -106,5 +106,11 @@ list5: Stocks bullish
 
 ##### Angle
 pi=4*atan(1);
+pi=4*tan(1);
+RTD=180/pi;
+angle=RTD*LinRegSlope(O_SPY,12);
+angleUD=IIf(angle>HHV(angle,5),1,IIf(angle<LLV(angle,5),-1,0));
+printf("angle UD:"+"\t"+angleUD+"\n");
+
 
 
