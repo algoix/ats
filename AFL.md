@@ -122,6 +122,7 @@ list5: Stocks bullish
 ##### Angle
 
 https://gist.github.com/parthasen/f048b1bc23ccdeaa253b2d60eb16609b
+
         pi=4*atan(1);
         pi=4*tan(1);
         RTD=180/pi;
