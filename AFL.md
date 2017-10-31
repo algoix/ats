@@ -1,3 +1,11 @@
+### Parts in a AFL pages
+##### trading set up
+##### market state
+##### plot
+##### indicators
+##### import python data
+##### trade signal
+
 ##### MARKET STATE == MS. No trade at 0 state . MS==4 is extremely up and 1 is extremely down
         UL=H_YDay_SPY; // level line 1
         LL=L_YDay_SPY;// level line 2
