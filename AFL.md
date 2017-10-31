@@ -1,10 +1,10 @@
 ### Parts in a AFL pages
-##### trading set up
-##### market state
-##### plot
-##### indicators
-##### import python data
-##### trade signal
+1. trading set up
+2. market state
+3. plot
+4. indicators
+5. import python data
+6. trade signal
 
 ##### MARKET STATE == MS. No trade at 0 state . MS==4 is extremely up and 1 is extremely down
         UL=H_YDay_SPY; // level line 1
