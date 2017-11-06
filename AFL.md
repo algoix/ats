@@ -142,3 +142,25 @@ and
         plot(angle,"angle",colorLime,styleLeftAxisScale); 
         plot(angleUD,"angleUD",colorLime,styleLeftAxisScale); 
 
+
+### Main Page
+https://github.com/algoix/Quant_Trade/blob/L1/SPY_level3.afl
+
+`#include "C:\Users\Michal\Dropbox\incl_trade_setup.afl"` helps to include trade setup code in main page.
+other includes are:
+
+	#include "C:\Users\Michal\Dropbox\incl_market_state.afl"
+	#include "C:\Users\Michal\Dropbox\incl_indicator.afl"
+	#include "C:\Users\Michal\Dropbox\incl_import.afl"
+	#include "C:\Users\Michal\Dropbox\incl_signal.afl"
+
+So mainly seven parts of main afl code are like : 
+
+1. market state https://github.com/algoix/Quant_Trade/blob/L1/incl_market_state.afl
+2. plot https://github.com/algoix/Quant_Trade/blob/L1/SPY_level3_Aug17.afl
+3. indicators https://github.com/algoix/Quant_Trade/blob/L1/incl_indicator.afl
+4. import python data https://github.com/algoix/Quant_Trade/blob/L1/incl_import.afl
+5. export data https://github.com/algoix/Quant_Trade/blob/L1/incl_export.afl
+6. trade signal https://github.com/algoix/Quant_Trade/blob/L1/incl_signal.afl
+7. Backtest https://github.com/algoix/Quant_Trade/blob/L1/backtest.md
+
