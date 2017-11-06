@@ -164,3 +164,16 @@ So mainly seven parts of main afl code are like :
 6. trade signal https://github.com/algoix/Quant_Trade/blob/L1/incl_signal.afl
 7. Backtest https://github.com/algoix/Quant_Trade/blob/L1/backtest.md
 
+##### data, feed and assets
+
+SPY, VIX and need to check option chain. "SPY   170721C00243000-SMART-OPT" and "SPY   170721P00243000-SMART-OPT"
+
+### Market State
+https://github.com/algoix/Quant_Trade/blob/L1/incl_market_state.afl
+			
+1. We will get market state lines like, Expected_line,Expected_line_upper,Expected_line_lower. Based on starting price @ 675th bar. upper or lower is +- (UL-NL)/2. So upper will show maximum level. 
+2. price, ACTV,B, MS, MS_up,MS_dn are based on market state line UP,LL,NL. We expect price above UL is high level.
+3. Expected_line==SP_SPY
+4. Sentiment_upline,sentiment_dnline,sentiment_nl are based on VXX and put/call ratio
+5. predicted_line is formed bassed on Expected_line and expected_movement
+
