@@ -30,72 +30,95 @@ import matplotlib.pyplot as plt
 import pickle
 
 iterations = 0
-df = pd.DataFrame()
-pdf= pd.DataFrame()
-final=pd.DataFrame()
+
+context = zmq.Context()
+
+#Forwarding ML output
+socket_pub = context.socket(zmq.PUB)
+socket_pub.bind('tcp://127.0.0.1:7010')
 
 port = "7000"
-
 # socket to talk to server
-context = zmq.Context()
-socket = context.socket(zmq.SUB)
+socket_sub = context.socket(zmq.SUB)
+print ("Collecting from <7000> for ML['mid','vwap','arima','km','REG','SVR'].")
+socket_sub.connect("tcp://localhost:%s" % port)
 
-print ("Collecting & plotting stock prices.")
-socket.connect("tcp://localhost:%s" % port)
-
-socket.setsockopt_string(zmq.SUBSCRIBE, u'SPY')
+socket_sub.setsockopt_string(zmq.SUBSCRIBE, u'SPY')
 
 
 # In[2]:
 
-import numpy as np
-import pandas as pd
-import math
+def preprocessing():
+    df.bidPrice=df.loc[:,'bidPrice'].replace(to_replace=0, method='ffill')
+    df.bidSize=df.loc[:,'bidSize'].replace(to_replace=0, method='ffill')
+    df.askPrice=df.loc[:,'askPrice'].replace(to_replace=0, method='ffill')
+    df.askSize=df.loc[:,'askSize'].replace(to_replace=0, method='ffill')
+    #df=df.dropna()
+    # to exclude 0
+    #df=df[df['bidPrice']>df.bidPrice.mean()-df.bidPrice.std()]
+    #df=df[df['askPrice']>df.askPrice.mean()-df.askPrice.std()]
+    df['mid']=(df.askPrice+df.bidPrice)/2
+    df['vwap']=((df.loc[:,'bidPrice']*df.loc[:,'bidSize'])+(df.loc[:,'askPrice']*df.loc[:,'askSize']))/(df.loc[:,'bidSize']+df.loc[:,'askSize'])
+    df['spread']=df.vwap-(df.askPrice+df.bidPrice)/2
+    df['v']=(df.askPrice+df.bidPrice)/2-((df.askPrice+df.bidPrice)/2).shift(60)
+    df['return']=(df.askPrice/df.bidPrice.shift(1))-1
+    df['sigma']=df.spread.rolling(60).std()
+    #return df
 
-from sklearn.model_selection import train_test_split
-from sklearn import linear_model
-from sklearn.svm import SVC
 
-df = pd.DataFrame()
-pdf= pd.DataFrame()
+# In[3]:
 
-def get_csv_pd(path):
-    #spy_pd=pd.read_csv('C:\\Users\Michal\Dropbox\IB_data\SPY.csv',sep=' ',names=['askPrice','askSize','bidPrice','bidSize'],index_col=0,parse_dates=True)
-    #spy_pd=pd.read_csv(path+'\SPY.csv',sep=',',names=['askPrice','askSize','bidPrice','bidSize'],index_col=0,parse_dates=True)
-    spy_pd=pd.read_csv(path,sep=',',dtype={'askPrice':np.float32,'askSize':np.float32,
-                                           'bidPrice':np.float32,'bidSize':np.float32},index_col=0,parse_dates=True)
-    return spy_pd
+def normalise(data,window_length=60):
+    data=df[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']]   
+    dfn=data/data.shift(60)
+    return dfn
 
-def get_csv_pd_notime(path):
-    #spy_pd=pd.read_csv('C:\\Users\Michal\Dropbox\IB_data\SPY.csv',sep=' ',names=['askPrice','askSize','bidPrice','bidSize'],index_col=0,parse_dates=True)
-    #spy_pd=pd.read_csv(path+'\SPY.csv',sep=',',names=['askPrice','askSize','bidPrice','bidSize'],index_col=0,parse_dates=True)
-    spy_pd = pd.read_csv(path, usecols=['askPrice','askSize','bidPrice','bidSize'], engine='python', skipfooter=3)
-    return spy_pd
-def preprocessing_df(df):
-    df.bidPrice=df.bidPrice.replace(to_replace=0, method='ffill')
-    df.bidSize=df.bidSize.replace(to_replace=0, method='ffill')
-    df.askPrice=df.askPrice.replace(to_replace=0, method='ffill')
-    df.askSize=df.askSize.replace(to_replace=0, method='ffill')
-    df['Close']=(df.bidPrice+df.askPrice)/2
-    df['price']=(df.bidPrice*df.bidSize+df.askPrice*df.askSize)/(df.bidSize+df.askSize)
-    #velP=np.where(df.Close>df.Close.shift(60),1,0)
-    #velN=np.where(df.Close<df.Close.shift(60),-1,0)
-    #U=np.where(df.Close>df.price.rolling(60).max(),1,0)
-    #D=np.where(df.Close<df.price.rolling(60).max(),-1,0)
-    #df['U']= np.where(velP*U==1,1,0)
-    #df['D']= np.where(velN*D==1,-1,0)
-    #df['U']= np.where(velP==1,1,0)
-    #df['D']= np.where(velN==1,-1,0)
-    df['U']= np.where(df.Close>df.price,1,0)
-    df['D']= np.where(df.Close<df.price,-1,0)
-    df['log']=np.log(df.Close)
-    #df['logDiff'] = df.log-df.log.rolling(60).mean()# almost 1 min
-    df['logDiff'] = df.log-df.log.shift(60)# almost 1 min
-    df['sigma']=df.log.rolling(60).std()
-    return df
+def de_normalise(dfn,window_length=60):
+    data=df[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']]
+    data=dfn*data.shift(60)
+    return data
+
+
+# In[4]:
+
+##### ARIMA        
 
 from statsmodels.tsa.arima_model import ARIMA
 from statsmodels.tsa.arima_model import ARIMAResults
+        
+###ARIMA preprocessing
+def arima_processing():
+    df['Lvwap']=np.log(df.vwap)
+    df['Lmid']=np.log(df.mid)
+    df['LDvwap']=df.Lvwap-df.Lvwap.shift(60)
+    df['LDmid']=df.Lmid-df.Lmid.shift(60)
+    #return df   
+
+###Model is already saved from "/Dropbox/DataScience/ARIMA_model_saving.ipynb". Here loaded and added to "df_ml"
+def ARIMA_():
+    predictions_mid=ARIMA_mid(df.LDmid)
+    predictions_vwap=ARIMA_vwap(df.LDvwap) 
+    data=df.mid
+    arima=df.mid.tail(1)+np.exp(predictions_vwap[-1]+df.LDvwap.shift(2).tail(1))-np.exp(predictions_mid[-1]+df.LDmid.shift(2).tail(1))
+    data['arima']=arima
+    return data
+
+def ARIMA_mid(data):
+    ### load model
+    mid_arima_loaded = ARIMAResults.load('mid_arima.pkl')
+    predictions_mid = mid_arima_loaded.predict()
+    return predictions_mid
+
+def ARIMA_vwap(data):
+    ### load model
+    vwap_arima_loaded = ARIMAResults.load('vwap_arima.pkl')
+    predictions_vwap = vwap_arima_loaded.predict()
+    return predictions_vwap   
+
+#### KALMAN moving average
+
+##KF moving average
+#https://github.com/pykalman/pykalman
 
 # Import a Kalman filter and other useful libraries
 from pykalman import KalmanFilter
@@ -104,13 +127,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import poly1d
 
-def kalman_ma(data):
-    x=data.price.tail(60)
-    y=data.Close.tail(60)
+def kalman_ma():
+    x=df.mid
     # Construct a Kalman filter
     kf = KalmanFilter(transition_matrices = [1],
                   observation_matrices = [1],
-                  initial_state_mean = 246,
+                  initial_state_mean = 248,
                   initial_state_covariance = 1,
                   observation_covariance=1,
                   transition_covariance=.01)
@@ -118,43 +140,10 @@ def kalman_ma(data):
     # Use the observed values of the price to get a rolling mean
     state_means, _ = kf.filter(x.values)
     state_means = pd.Series(state_means.flatten(), index=x.index)
-    data['km']=state_means
-    return data
+    x['km']=state_means
+    return x
 
-
-# In[5]:
-
-## warm up upto preprocessing
-
-final=pd.DataFrame()
-window=1000
-for _ in range(window):
-#while True:
-    iterations += 1
-    string = socket.recv_string()
-    sym, bidPrice,bidSize,askPrice,askSize = string.split()
-    #print('%s %s %s %s %s' % (sym, bidPrice,bidSize,askPrice,askSize))
-    dt = datetime.datetime.now()
-    df = df.append(pd.DataFrame({'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
-    data=preprocessing_df(df)
-    #print(df.tail(1))
-    print(data.tail(1))   
-
-
-# In[10]:
-
-#testing to delete inf and NaN
-#df=df[100:]
-
-
-# In[12]:
-
-#checking
-#df.head()
-
-
-# In[6]:
-
+### Linear Regression, sklearn, svm:SVR,linear_model
 import pickle
 #from sklearn.cross_validation import train_test_split
 from sklearn import linear_model
@@ -164,109 +153,88 @@ from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 
 
-# In[13]:
+## loading model saved from /Dropbox/DataScience/REG_model_saving.ipynb
+filename_rgr = 'rgr.sav'
+filename_svr = 'svr.sav'
+# load the model from disk
+loaded_rgr_model = pickle.load(open(filename_rgr, 'rb'))
+loaded_svr_model = pickle.load(open(filename_svr, 'rb'))
 
-# saving linear model
-df=df[1:].dropna()
-X=df[['askPrice','askSize','bidPrice','bidSize','Close','U','D','sigma']]
-y=df[['logDiff']]
-regr = linear_model.LinearRegression()
-regr_model=regr.fit(X,y)
-regr_model = pickle.dumps(regr_model)
-# Fit regression model
-svr_rbf = SVR(kernel='rbf', C=1e3, gamma=0.9) #kernel='linear' #kernel='poly'
-svr_model = svr_rbf.fit(X, y)
-svr_model = pickle.dumps(svr_model)
+def strat_lr():
+    X=df[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']]
+    X=X.dropna()
+    y=df[['mid']]
+    y=y.dropna()
+    predict_regr=loaded_rgr_model.predict(X)
+    predict_svr=loaded_svr_model.predict(X)
+    X["nREG"]=predict_regr
+    X['nSVR']=predict_svr
+    
+    #y["REG"]=X.nREG*df.mid.dropna().shift(60)
+    #y["SVR"]=X.nSVR*df.mid.dropna().shift(60)
 
+    return X
 
-# In[14]:
+    
+#### loading classification model from /Dropbox/DataScience/ML_20Sep
+filename_svm_model_up = 'svm_model_up.sav'
+filename_lm_model_up = 'lm_model_up.sav'
+filename_svm_model_dn = 'svm_model_dn.sav'
+filename_lm_model_dn = 'lm_model_dn.sav'
+# load the model from disk
+loaded_svm_up_model = pickle.load(open(filename_svm_model_up, 'rb'))
+loaded_lm_up_model = pickle.load(open(filename_lm_model_up, 'rb'))
+loaded_svm_dn_model = pickle.load(open(filename_svm_model_dn, 'rb'))
+loaded_lm_dn_model = pickle.load(open(filename_lm_model_dn, 'rb'))
 
-# saving logistics and SVC model
-df=df[1:].dropna()
-X=df[['askPrice','askSize','bidPrice','bidSize','Close','price','sigma']]
-y1=df[['U']]
-y2=df[['D']]
+def classification_up_dn():
+    X=df[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']]
+    X=X.dropna()
+    predict_svm_up=loaded_svm_up_model.predict(X)
+    predict_lm_up=loaded_lm_up_model.predict(X)
+    predict_svm_dn=loaded_svm_dn_model.predict(X)
+    predict_lm_dn=loaded_lm_dn_model.predict(X)
+    
+    predict_svm=predict_svm_up+predict_svm_dn
+    predict_lm=predict_lm_up+predict_lm_dn
+    predict= (float(predict_svm[-1])+float(predict_lm[-1]))
+    X['UD']=predict
+    return X
 
-svm = SVC(kernel='linear')
-lm = linear_model.LogisticRegression(C=1e4)
-svm_model_up= svm.fit(X,y1)
-svm_model_up = pickle.dumps(svm_model_up)
-lm_model_up= lm.fit(X, y1)
-lm_model_up = pickle.dumps(lm_model_up)
-svm_model_dn= svm.fit(X, y2)
-svm_model_dn = pickle.dumps(svm_model_dn)
-lm_model_dn= lm.fit(X, y2)
-lm_model_dn = pickle.dumps(lm_model_dn)
+### LSTM
 
-
-# In[15]:
-
-#loading regression model, first save the model
-svr_model = pickle.loads(svr_model)
-regr_model = pickle.loads(regr_model)
-
-#loading classification model, first save the model
-svm_model_up = pickle.loads(svm_model_up)
-svm_model_dn = pickle.loads(svm_model_dn)
-lm_model_up = pickle.loads(lm_model_up)
-lm_model_dn = pickle.loads(lm_model_dn)
-
-
-# In[16]:
-
-def strat_lr(data):
-    data=data.tail(60).dropna()
-    X=data[['askPrice','askSize','bidPrice','bidSize','Close','U','D','sigma']]
-    y=data[['logDiff']]
-    predict_regr=regr_model.predict(X)
-    predict_svr=svr_model.predict(X)
-    dt=data[['Close']]
-    dt['predict_regr']=predict_regr
-    dt['predict_svr']=predict_svr
-        
-    pdf=data
-    pdf['pREG']=np.exp(dt.predict_regr+data.log.shift(59))
-    pdf['pSVR']=np.exp(dt.predict_regr+data.log.shift(59))
-         
-    #dt=data[['price','predict']]
-    return pdf
+#df.loc[:, cols].prod(axis=1)
+def lstm_processing(df_LSTM):
+    
+    df_price=df_LSTM[['mid','vwap','arima','km','REG','SVR']]
+    #df_price=df_price.dropna()
+    df_lstm=df_price/df_price.shift(60)
+    df_lstm['UD']=df_LSTM.UD
+    df_lstm=df_lstm.dropna()
+    return df_lstm
 
 
-# In[17]:
-
-def classification_up_dn(data):
-    X=data[['askPrice','askSize','bidPrice','bidSize','Close','price','sigma']]
-    y1=data[['U']]
-    y2=data[['D']]
-    pr_df=data.tail(60)
-    predict_svm_up=svm_model_up.predict(X.tail(60))
-    pr_df['predict_svm_up']=predict_svm_up
-    predict_lm_up=lm_model_up.predict(X.tail(60))
-    pr_df['predict_lm_up']=predict_lm_up
-    predict_svm_dn=svm_model_dn.predict(X.tail(60))
-    pr_df['predict_svm_dn']=predict_svm_dn
-    predict_lm_dn=lm_model_dn.predict(X.tail(60))
-    pr_df['predict_lm_dn']=predict_lm_dn
-    pr_df['predict_svm']=pr_df.predict_svm_up+pr_df.predict_svm_dn
-    pr_df['predict_lm']=pr_df.predict_lm_up+pr_df.predict_lm_dn
-    return pr_df
-
-
-# In[40]:
-
-def ARIMA_df(df):
-    ### load model
-    arima_model_loaded = ARIMAResults.load('sevennine_arima.pkl')
-    predictions = arima_model_loaded.predict()
-    #predictions =arima_model_loaded.fittedvalues
-    #df['pr_arima']=np.exp(predictions+df.log.shift(60))    
-    return predictions
-
-
-# In[20]:
+import numpy
+import matplotlib.pyplot as plt
+import pandas
+import math
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
+import numpy
+import matplotlib.pyplot as plt
+import pandas
+import math
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
 
 from keras.models import load_model
-model = load_model('sevensep.h5')
+model = load_model('28sep.h5')
 
 # convert an array of values into a dataset matrix
 def create_dataset(dataset, look_back=1):
@@ -278,108 +246,140 @@ def create_dataset(dataset, look_back=1):
         d = dataset[i:(i+look_back), 3]
         e=  dataset[i:(i+look_back), 4]
         f = dataset[i:(i+look_back), 5]
-        g=  dataset[i:(i+look_back), 6]
-        h=  dataset[i:(i+look_back), 7]
-        dataX.append(np.c_[a,b,c,d,f,g,h])
+        dataX.append(np.c_[b,c,d,e,f])
         #dataX.append(b)
         #dataX.append(c)
         #dataX.append(d)
         #dataX.append(e)
         #dataX.concatenate((a,bT,cT,dT,eT),axis=1)
-        dataY.append(dataset[i + look_back,4])
+        dataY.append(dataset[i + look_back,0])
     return np.array(dataX), np.array(dataY)
 
-def strat_LSTM(data):
-    #data=preprocessing_df(df)
-    #pr=strat_class(data)
-    #data=data[['close','vel','sigma','P','pREG','predict_svm','predict_lm']]
-    
-    #data=data[['Close','km','logDiff','price','pREG','pSVR','UD']]
-    dataset = data.values
-    dataset = dataset.astype('float32')
 
-    # normalize the dataset
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    dataset = scaler.fit_transform(dataset)
+def strat_LSTM(df_LSTM):
+    
+    #normalization
+    df_lstm_n=lstm_processing(df_LSTM)
+    dataset=df_lstm_n.values
+    dataset = dataset.astype('float32')
     # reshape into X=t and Y=t+1
     look_back = 3
-    dataX, dataY = create_dataset(dataset,look_back)
+    X_,Y_ = create_dataset(dataset,look_back)
     # reshape input to be [samples, time steps, features]
-    dataX = numpy.reshape(dataX, (dataX.shape[0],dataX.shape[1],dataX.shape[2]))
+    X_ = numpy.reshape(X_, (X_.shape[0],X_.shape[1],X_.shape[2]))
     # make predictions
-    Predict = model.predict(dataX)
-    #plt.plot(dataY)
-    #plt.plot(Predict)
-    #plt.show()
-    #return Predict
-    return numpy.array(Predict), numpy.array(dataY)
+    predict = model.predict(X_)
+    df_LSTM=df_LSTM.tail(len(predict))
+    df_LSTM['nLSTM']=predict
+    df_LSTM['LSTM']=(df_LSTM.nLSTM/df_LSTM.nLSTM.shift(60))*df_LSTM.mid
+    
+    return df_LSTM
 
 
-# In[ ]:
+# In[5]:
 
-#window=20
-#for _ in range(window):
+df = pd.DataFrame()
 
-while True:
+
+# In[6]:
+
+print ("publishing to  <7010> for plot.")
+
+
+# In[13]:
+
+## warm up upto preprocessing
+window=500
+for _ in range(window):
+#while True:
     iterations += 1
-    string = socket.recv_string()
+    string = socket_sub.recv_string()
     sym, bidPrice,bidSize,askPrice,askSize = string.split()
     #print('%s %s %s %s %s' % (sym, bidPrice,bidSize,askPrice,askSize))
     dt = datetime.datetime.now()
-    df = df.append(pd.DataFrame({'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
-    data=preprocessing_df(df)
-    pre_arima=ARIMA_df(data.logDiff)
-    data['pr_arima']=np.exp(float(pre_arima[-1])+df.log.shift(60)) 
-    data=kalman_ma(data)
-    data=strat_lr(data)
-    data=classification_up_dn(data)
-    data['predict_svm']=data.predict_svm_up+data.predict_svm_dn
-    data['predict_lm']=data.predict_lm_up+data.predict_lm_dn
-    #data['UD']=np.where(data.predict_svm+data.predict_lm>0,1,np.where(data.predict_svm+data.predict_lm<0,-1,0))  
-    data['UD']=np.where(np.logical_and(data.predict_svm>0,data.predict_lm>0),1,np.where(np.logical_and(data.predict_svm<0,data.predict_lm<0),-1,0))  
-    #data=data.dropna()   
-    data['spread']=data.Close-data.pr_arima
-    df_LSTM= data[['askPrice','askSize','bidPrice','bidSize','Close','spread','pr_arima','sigma']]
-    pr,y=strat_LSTM(df_LSTM)
-    UD=pr[-1]-y[-1]
-    final=final.append(pd.DataFrame({'LSTM':float(UD)},index=[dt]))
-    output=data[['Close','price','km','pr_arima','pREG','pSVR','UD']]
-    #output['spread']=data.pREG-data.SVR
-    output['LSTM']=final.LSTM
+    df = df.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
+    df=df.tail(500)
+    preprocessing()
+    arima_processing()# 60 data points needed for this process.
+    #dfn=normalise(df,60)
+    #data=de_normalise(dfn,60)
     
-    #plt.plot(pr)
-    #plt.plot(y)
-    #plt.plot(moving_average(y,60))
-    #plt.plot(moving_average(pr,60))
-    #plt.show()
-     
+    arima=ARIMA_()#ARIMA
+    km=kalman_ma()#kalman
+    UD=classification_up_dn()#classification
+    RS=strat_lr()#regression
+    #df[['mid','vwap','arima','km','REG','SVR']]
     
-    #print(df.tail(1))
+    df_LSTM=df[['mid','vwap']]
+    df_LSTM['arima']=arima
+    df_LSTM['km']=km
+    df_LSTM['UD']=UD.UD
+    df_LSTM['REG']=RS.nREG
+    df_LSTM['SVR']=RS.nSVR
+    LSTM=strat_LSTM(df_LSTM)
+    final=LSTM[['mid','REG','SVR','arima','km','LSTM','UD']]
+    final.insert(loc=0, column='Stock', value=df.Stock)
+
+
+# In[10]:
+
+len(df.dropna())
+
+
+# In[11]:
+
+df.dropna().head()
+
+
+# In[14]:
+
+len(final.dropna())
+
+
+# In[15]:
+
+final.dropna().head()
+
+
+# In[16]:
+
+## warm up upto preprocessing
+#window=200
+#for _ in range(window):
+while True:
+    iterations += 1
+    string = socket_sub.recv_string()
+    sym, bidPrice,bidSize,askPrice,askSize = string.split()
+    #print('%s %s %s %s %s' % (sym, bidPrice,bidSize,askPrice,askSize))
+    dt = datetime.datetime.now()
+    df = df.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
+    df=df.tail(500)
+    preprocessing()
+    arima_processing()# 60 data points needed for this process.
+    #dfn=normalise(df,60)
+    #data=de_normalise(dfn,60)
+    
+    arima=ARIMA_()#ARIMA
+    km=kalman_ma()#kalman
+    UD=classification_up_dn()#classification
+    RS=strat_lr()#regression
+    #df[['mid','vwap','arima','km','REG','SVR']]
+    
+    df_LSTM=df[['mid','vwap']]
+    df_LSTM['arima']=arima
+    df_LSTM['km']=km
+    df_LSTM['UD']=UD.UD
+    df_LSTM['REG']=RS.nREG
+    df_LSTM['SVR']=RS.nSVR
+    LSTM=strat_LSTM(df_LSTM)
+    final=LSTM[['mid','REG','SVR','arima','km','LSTM','UD']]
+    final.insert(loc=0, column='Stock', value=df.Stock)
+    
     #print(data.tail(1))
-
-    #print(data_arima.tail(1))
-
-    #print(X.tail(1),y1.tail(1),y2.tail(1))
-    #s0.write({'x': str(dt)[11:-3], 'y': float(output.error[-1])})
-    
-    print(output.tail(1))
-    
-    output.tail(1).to_csv('/home/octo/Dropbox/ml_output.txt', sep=',', encoding='utf-8')
-
-
-# In[83]:
-
-output
-
-
-# In[77]:
-
-dataX, dataY=create_dataset(df_LSTM, look_back=1)
-
-
-# In[78]:
-
-dataY
+    #print(final.tail(1))
+    x = final.to_string(header=False,index=False,index_names=False).split('\n')
+    socket_pub.send_string(x[-1])
+    print(x[-1]) 
 
 
 # In[ ]:
