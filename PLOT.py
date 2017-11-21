@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[6]:
+# In[1]:
 
 import tpqib
 import datetime
@@ -28,17 +28,10 @@ import plotly.tools as tls
 from plotly.graph_objs import *
 import cufflinks
 
-context = zmq.Context()
-# Subscribing to ML 
-port = "7010"
-socket_sub = context.socket(zmq.SUB)
-socket_sub.connect("tcp://localhost:%s" % port)
-socket_sub.setsockopt_string(zmq.SUBSCRIBE, u'SPY')
-
-print ("Collecting from <7010> to plot.")
+print ("Collecting from <7010>.....")
 
 
-# In[32]:
+# In[2]:
 
 pc = json.load(open('creds/plotly_creds.json', 'r'))
 
@@ -69,12 +62,12 @@ trace0 = Scatter(
     x=[], y=[],
     mode='lines+markers',
     stream=stream_0,
-    name='km')
+    name='price')
 trace1 = Scatter(
     x=[], y=[],
     mode='lines+markers',
     stream=stream_1,
-    name='LSTM')
+    name='predicted price')
 
 dats = Data([trace0, trace1])
 
@@ -92,7 +85,14 @@ s0.open()
 s1.open()
 
 
-# In[17]:
+# In[3]:
+
+context = zmq.Context()
+# Subscribing to ML 
+port = "7010"
+socket_sub = context.socket(zmq.SUB)
+socket_sub.connect("tcp://localhost:%s" % port)
+socket_sub.setsockopt_string(zmq.SUBSCRIBE, u'SPY')
 
 port1 = "7000"
 socket_sub1 = context.socket(zmq.SUB)
@@ -104,7 +104,7 @@ socket_pub1 = context.socket(zmq.PUB)
 socket_pub1.bind('tcp://127.0.0.1:7040')
 
 
-# In[13]:
+# In[4]:
 
 def preprocessing():
     df.bidPrice=df.loc[:,'bidPrice'].replace(to_replace=0, method='ffill')
@@ -124,7 +124,7 @@ def preprocessing():
     #return df
 
 
-# In[18]:
+# In[5]:
 
 df = pd.DataFrame()
 df_val=pd.DataFrame()
@@ -143,19 +143,27 @@ while True:
     #print('%s %s %s %s %s' % (sym, bidPrice,bidSize,askPrice,askSize))
     dt = datetime.datetime.now()
     df = df.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
+    
     df=df.tail(50)
     preprocessing()
-    
+    #df.to_csv('C:\\Users\Michal\Desktop\df_.csv', sep=',', encoding='utf-8')
     ml=socket_sub.recv_string()
     sym,mid,REG,SVR,arima,km,LSTM,UD= ml.split()
     dt = datetime.datetime.now()
     df_val = df_val.append(pd.DataFrame({'Stock':sym,'mid': float(mid),'REG':float(REG),'SVR':float(SVR),'arima': float(arima),'km': float(km),'LSTM':float(LSTM),'UD':float(UD)},index=[dt]))
     
+    predicted_value=df_val.LSTM.tail(360)+(df.mid.tail(360)-df_val.mid.tail(360))
+    predicted_mean=df_val.km.tail(360)+(df.mid.tail(360)-df_val.mid.tail(360))
         #plotting
     dt = datetime.datetime.now()
-    s0.write({'x': str(dt)[11:-3], 'y': float(df['mid'].tail(1))})
-    s1.write({'x': str(dt)[11:-3], 'y': float(df_val['LSTM'].tail(1))+(float(df['mid'].tail(1))-float(df_val['km'].tail(1)))})
+    #s0.write({'x': str(dt)[11:-3], 'y': float(df['mid'].tail(1))})
+    s0.write({'x': str(dt)[11:-3], 'y': float(df_val['km'].tail(1))+(float(df['mid'].tail(1))-float(df_val['mid'].tail(1)))})
+    s1.write({'x': str(dt)[11:-3], 'y': float(df_val['LSTM'].tail(1))+(float(df['mid'].tail(1))-float(df_val['mid'].tail(1)))})
     
+    #s0.write({'x': str(dt)[11:-3], 'y': float(predicted_mean.tail(1))})
+    #s1.write({'x': str(dt)[11:-3], 'y': float(predicted_value.tail(1))})
+
+        
     x = df[['Stock','mid']].to_string(header=False,index=False).split('\n')
     socket_pub1.send_string(x[-1])
     #print(x[-1])    
