@@ -276,9 +276,10 @@ def strat_LSTM(df_LSTM):
     return df_LSTM
 
 
-# In[5]:
+# In[11]:
 
-df = pd.DataFrame()
+#df = pd.DataFrame()
+dfsave=pd.DataFrame()
 
 
 # In[6]:
@@ -286,10 +287,10 @@ df = pd.DataFrame()
 print ("publishing to  <7010> for plot.")
 
 
-# In[13]:
+# In[12]:
 
 ## warm up upto preprocessing
-window=500
+window=200
 for _ in range(window):
 #while True:
     iterations += 1
@@ -298,7 +299,13 @@ for _ in range(window):
     #print('%s %s %s %s %s' % (sym, bidPrice,bidSize,askPrice,askSize))
     dt = datetime.datetime.now()
     df = df.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
-    df=df.tail(500)
+    dfsave = dfsave.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
+
+    df=df.tail(600)
+    dfsave=dfsave.tail(600)
+    
+    dfsave.to_csv('/home/octo/Dropbox/ba.csv', sep=',', encoding='utf-8')
+    
     preprocessing()
     arima_processing()# 60 data points needed for this process.
     #dfn=normalise(df,60)
@@ -309,7 +316,6 @@ for _ in range(window):
     UD=classification_up_dn()#classification
     RS=strat_lr()#regression
     #df[['mid','vwap','arima','km','REG','SVR']]
-    
     df_LSTM=df[['mid','vwap']]
     df_LSTM['arima']=arima
     df_LSTM['km']=km
@@ -319,33 +325,36 @@ for _ in range(window):
     LSTM=strat_LSTM(df_LSTM)
     final=LSTM[['mid','REG','SVR','arima','km','LSTM','UD']]
     final.insert(loc=0, column='Stock', value=df.Stock)
-
-
-# In[10]:
-
-len(df.dropna())
-
-
-# In[11]:
-
-df.dropna().head()
-
-
-# In[14]:
-
-len(final.dropna())
+    
+    final.to_csv('/home/octo/Dropbox/final_ML.csv', sep=',', encoding='utf-8')
+    
+    x = final.to_string(header=False,index=False,index_names=False).split('\n')
+    socket_pub.send_string(x[-1])
+    #print(x[-1]) 
 
 
 # In[15]:
 
-final.dropna().head()
+#len(dfsave.dropna())
+
+
+# In[22]:
+
+#df.dropna().head()
 
 
 # In[16]:
 
-## warm up upto preprocessing
-#window=200
-#for _ in range(window):
+#len(final.dropna())
+
+
+# In[26]:
+
+#final.dropna().head()
+
+
+# In[ ]:
+
 while True:
     iterations += 1
     string = socket_sub.recv_string()
@@ -353,7 +362,13 @@ while True:
     #print('%s %s %s %s %s' % (sym, bidPrice,bidSize,askPrice,askSize))
     dt = datetime.datetime.now()
     df = df.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
-    df=df.tail(500)
+    dfsave = dfsave.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
+
+    df=df.tail(600)
+    #dfsave=dfsave.tail(600)
+    
+    dfsave.to_csv('/home/octo/Dropbox/ba.csv', sep=',', encoding='utf-8')
+    
     preprocessing()
     arima_processing()# 60 data points needed for this process.
     #dfn=normalise(df,60)
@@ -364,7 +379,6 @@ while True:
     UD=classification_up_dn()#classification
     RS=strat_lr()#regression
     #df[['mid','vwap','arima','km','REG','SVR']]
-    
     df_LSTM=df[['mid','vwap']]
     df_LSTM['arima']=arima
     df_LSTM['km']=km
@@ -375,11 +389,11 @@ while True:
     final=LSTM[['mid','REG','SVR','arima','km','LSTM','UD']]
     final.insert(loc=0, column='Stock', value=df.Stock)
     
-    #print(data.tail(1))
-    #print(final.tail(1))
+    final.to_csv('/home/octo/Dropbox/final_ML.csv', sep=',', encoding='utf-8')
+    
     x = final.to_string(header=False,index=False,index_names=False).split('\n')
     socket_pub.send_string(x[-1])
-    print(x[-1]) 
+    #print(x[-1]) 
 
 
 # In[ ]:
