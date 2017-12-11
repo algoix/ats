@@ -10,7 +10,8 @@ Expected_line=ValueWhen(Bars_so_far_today==500,O_SPY);
 Expected_line_upper=ValueWhen(Bars_so_far_today==500,O_SPY)+(UL-LL)/2; 
 Expected_line_lower=ValueWhen(Bars_so_far_today==500,O_SPY)-(UL-LL)/2; 
 expected_movement_5m=(UL-LL)/(2*75);
-printf("expected_movement_5m:"+"\t"+expected_movement_5m+"\n"); // I expect 0.05 up or down from expected line
+
+//printf("expected_movement_5m:"+"\t"+expected_movement_5m+"\n"); // I expect 0.05 up or down from expected line
 
 // When "sentiment_nl" (calculated below) is above "predicted_line" or below will show the sentiment of the market
 
@@ -18,59 +19,88 @@ time_lapsed=NumToStr(timenum()/100);
 hh_t = StrToNum(StrLeft(time_lapsed,3))-10;
 mm_t= StrToNum(StrMid(time_lapsed,3,2))+30;
 time_lapsed=round((hh_t*60+mm_t));
+printf("time_lapsed:"+"\t"+time_lapsed+"\n");
 
+/*
 printf("time_lapsed:"+"\t"+time_lapsed+"\n");
 printf("Expected_line:"+"\t"+Expected_line+"\n");
 printf("Expected_line_up:"+"\t"+Expected_line_upper+"\n");
 printf("Expected_line_lo:"+"\t"+Expected_line_lower+"\n");
+*/
 
 price=(Ref(H_SPY,-1)+Ref(L_SPY,-1)+Ref(C_SPY,-1))/3;
-B=(HHV(H_5min_SPY,12) + HHV(H_1Min_SPY-L_1Min_SPY,L_long)+LLV(L_5Min_SPY,12) + LLV(H_1Min_SPY-L_1Min_SPY,L_long))/2;//*** NOT in use
-C_5Min_SPY_tsf=TSF(C_5Min_SPY,60)-Ref(MA(O_SPY,60),-60);//***
+B=(HHV(H_5min_SPY,12) + HHV(H_1Min_SPY-L_1Min_SPY,60)+LLV(L_5Min_SPY,12) + LLV(H_1Min_SPY-L_1Min_SPY,60))/2;
 
 //VWAP spread indicator with steer 
 totalVolume = Sum(Ref(v_SPY,-1),60);
 VWAP = Sum (price *Ref(v_SPY,-1),60) /totalVolume;
 spread=O_SPY-VWAP;//price-VWAP; see P_steer
-spread_up=MA(spread,60)+2*StDev(spread,60);
-spread_dn=MA(spread,60)-2*StDev(spread,60);
-//cross(spread_up,spread)==down prediction
-//cross(spread,spread_dn)==up prediction
-MS_spread_upward=ValueWhen(cross(spread,spread_dn),O_SPY);// mean reversion line
-MS_spread_dnward=ValueWhen(cross(spread_up,spread),O_SPY);
+
+//Long state of price
+C_5Min_SPY_tsf=TSF(C_5Min_SPY,12);
+upside_state_price=ValueWhen(Cross(O_SPY,B) AND O_SPY>C_5Min_SPY_tsf,O_SPY);
+downside_state_price=ValueWhen(Cross(B,O_SPY) AND O_SPY<C_5Min_SPY_tsf ,O_SPY);
+long_state_price=IIf(spread>0,upside_state_price,downside_state_price);
+
+//Angle
+pi=4*tan(1);
+RTD=180/pi;
+angle=RTD*LinRegSlope(O_SPY,12);
+angleUD=IIf(angle>=HHV(angle,12),1,IIf(angle<=LLV(angle,12),-1,0));
+printf("angle UD:"+"\t"+angleUD+"\n");
 
 // VELOCITY
-velocity=Sum(IIf((O_SPY-Ref(O_SPY,-60))/0.1>1,1,IIf((O_SPY-Ref(O_SPY,-60))/-0.1>1,-1,0)),60);
-velocity_D=velocity-Ref(velocity,-1);
+// when Low_velocity_price_upward=ref(Low_velocity_price_upward,-1) and O_SPY>Low_velocity_price_upward then buy
+velocity=Sum(IIf((O_SPY-Ref(O_SPY,-60))/0.05>1,1,IIf((O_SPY-Ref(O_SPY,-60))/-0.05>1,-1,0)),60);
+high_velocity=HHV(velocity,300);
+low_velocity=LLV(velocity,300);
+High_velocity_price_dnward=ValueWhen(Cross(ValueWhen(velocity<(high_velocity-5),O_SPY),O_SPY),O_SPY);
+Low_velocity_price_upward=ValueWhen(Cross(ValueWhen(velocity>(low_velocity+5),O_SPY),O_SPY),O_SPY);
+//printf("High_velocity_price_dnward:"+"\t"+High_velocity_price_dnward+"\n");
+//printf("Low_velocity_price_upward:"+"\t"+Low_velocity_price_upward+"\n");
 
-MS_vel_upward=ValueWhen(velocity<-40 AND velocity_D==-1,O_SPY);//mean reversion line
-MS_vel_dnward=ValueWhen(velocity>40 AND velocity_D==1 ,O_SPY);//mean reversion line
-
-MS_MR_upward=ValueWhen(Cross(O_SPY,MS_vel_upward) OR Cross(O_SPY,MS_spread_upward),O_SPY);//*** mixing both MS_vel_upward or MS_spread_upward
-MS_MR_dnward=ValueWhen(Cross(MS_vel_dnward,O_SPY) OR Cross(MS_spread_dnward,O_SPY),O_SPY);
 
 //MARKET STATE == MS. No trade at 0 state . MS==4 is extremely up and 1 is extremely down
+UL=H_YDay_SPY; // level line 1
+LL=L_YDay_SPY;// level line 2
+NL=(UL+LL)/2; // level line 3
 MS_pr=IIf(O_SPY>=UL,4,IIf(O_SPY>=NL AND O_SPY<UL,3,IIf(O_SPY<NL AND O_SPY>=LL,2,IIf(O_SPY<LL,1,0))));//***
+printf("MS_pr:"+"\t"+MS_pr+"\n");
+
 
 // VXX and OPT sentiment
+/*
 sentiment_vxx=C_VXX;
 sentimetn_pc=C_OP_put/C_OP_call;
 
-sentiment_vxx_ma=MA(sentiment_vxx,60);
-sentimetn_pc_ma=MA(sentimetn_pc,360);
+sentiment_vxx_ma=EMA(sentiment_vxx,5);
+sentimetn_pc_ma=EMA(sentimetn_pc,60);
 
-sentiment_vxx_HHV=HHV(sentiment_vxx_ma,360);
-sentiment_vxx_LLV=LLV(sentiment_vxx_ma,360);
+sentiment_vxx_HHV=HHV(sentiment_vxx_ma,60);
+sentiment_vxx_LLV=LLV(sentiment_vxx_ma,60);
 
 MS_VXX_up=ValueWhen(Cross(sentiment_vxx_LLV,sentiment_vxx),C_SPY);//**
 MS_VXX_dn=ValueWhen(Cross(sentiment_vxx,sentiment_vxx_HHV),C_SPY);//**
 
-MS_pc_up=ValueWhen(Cross(sentimetn_pc_ma-0.02,sentimetn_pc),C_SPY);//**
+MS_pc_up=ValueWhen(Cross(sentimetn_pc_ma-0.02
+,sentimetn_pc),C_SPY);//**
 MS_pc_dn=ValueWhen(Cross(sentimetn_pc,sentimetn_pc_ma+0.02),C_SPY);//**
 
 
 sentiment_upline=ValueWhen(Cross(O_SPY,MS_VXX_up) OR Cross(O_SPY,MS_pc_up),O_SPY);//Max(MS_VXX_up,MS_pc_up);//green
 sentiment_dnline=ValueWhen(Cross(MS_VXX_dn,O_SPY) OR Cross(MS_pc_dn,O_SPY),O_SPY);//Min(MS_VXX_dn,MS_pc_dn);//red
 sentiment_nl=(sentiment_upline+sentiment_dnline)/2; // used at incl_indicator
+*/
+sentiment_vxx=C_VXX;
+sentiment_pc=C_OP_put/C_OP_call;
+
+sentiment_vxx_ma=EMA(sentiment_vxx,300);
+sentiment_pc_ma=EMA(sentiment_pc,300);
+
+sentiment_dnline=ValueWhen(Cross(C_VXX,sentiment_vxx_ma) OR Cross(sentiment_pc,sentiment_pc_ma),O_SPY);
+sentiment_upline=ValueWhen(Cross(sentiment_vxx_ma,C_VXX) OR Cross(sentiment_pc_ma,sentiment_pc),O_SPY);
+
+sentiment_nl=(sentiment_upline+sentiment_dnline)/2; // used at incl_indicator
+
 
 _SECTION_END();
