@@ -1,8 +1,3 @@
-
-# coding: utf-8
-
-# In[1]:
-
 import zmq
 import datetime
 import pandas as pd
@@ -45,9 +40,6 @@ socket_sub.connect("tcp://localhost:%s" % port)
 
 socket_sub.setsockopt_string(zmq.SUBSCRIBE, u'SPY')
 
-
-# In[2]:
-
 def preprocessing():
     df.bidPrice=df.loc[:,'bidPrice'].replace(to_replace=0, method='ffill')
     df.bidSize=df.loc[:,'bidSize'].replace(to_replace=0, method='ffill')
@@ -65,9 +57,6 @@ def preprocessing():
     df['sigma']=df.spread.rolling(60).std()
     #return df
 
-
-# In[3]:
-
 def normalise(data,window_length=60):
     data=df[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']]   
     dfn=data/data.shift(60)
@@ -77,9 +66,6 @@ def de_normalise(dfn,window_length=60):
     data=df[['askPrice','askSize','bidPrice','bidSize','vwap','spread','v','return','sigma']]
     data=dfn*data.shift(60)
     return data
-
-
-# In[4]:
 
 ##### ARIMA        
 
@@ -105,13 +91,13 @@ def ARIMA_():
 
 def ARIMA_mid(data):
     ### load model
-    mid_arima_loaded = ARIMAResults.load('mid_arima.pkl')
+    mid_arima_loaded = ARIMAResults.load('/home/octo/Dropbox/trading_system/system_L1P0/mid_arima.pkl')
     predictions_mid = mid_arima_loaded.predict()
     return predictions_mid
 
 def ARIMA_vwap(data):
     ### load model
-    vwap_arima_loaded = ARIMAResults.load('vwap_arima.pkl')
+    vwap_arima_loaded = ARIMAResults.load('/home/octo/Dropbox/trading_system/system_L1P0/vwap_arima.pkl')
     predictions_vwap = vwap_arima_loaded.predict()
     return predictions_vwap   
 
@@ -154,8 +140,8 @@ from sklearn.svm import SVC
 
 
 ## loading model saved from /Dropbox/DataScience/REG_model_saving.ipynb
-filename_rgr = 'rgr.sav'
-filename_svr = 'svr.sav'
+filename_rgr = '/home/octo/Dropbox/trading_system/system_L1P0/rgr.sav'
+filename_svr = '/home/octo/Dropbox/trading_system/system_L1P0/svr.sav'
 # load the model from disk
 loaded_rgr_model = pickle.load(open(filename_rgr, 'rb'))
 loaded_svr_model = pickle.load(open(filename_svr, 'rb'))
@@ -177,10 +163,10 @@ def strat_lr():
 
     
 #### loading classification model from /Dropbox/DataScience/ML_20Sep
-filename_svm_model_up = 'svm_model_up.sav'
-filename_lm_model_up = 'lm_model_up.sav'
-filename_svm_model_dn = 'svm_model_dn.sav'
-filename_lm_model_dn = 'lm_model_dn.sav'
+filename_svm_model_up = '/home/octo/Dropbox/trading_system/system_L1P0/svm_model_up.sav'
+filename_lm_model_up = '/home/octo/Dropbox/trading_system/system_L1P0/lm_model_up.sav'
+filename_svm_model_dn = '/home/octo/Dropbox/trading_system/system_L1P0/svm_model_dn.sav'
+filename_lm_model_dn = '/home/octo/Dropbox/trading_system/system_L1P0/lm_model_dn.sav'
 # load the model from disk
 loaded_svm_up_model = pickle.load(open(filename_svm_model_up, 'rb'))
 loaded_lm_up_model = pickle.load(open(filename_lm_model_up, 'rb'))
@@ -234,7 +220,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
 
 from keras.models import load_model
-model = load_model('28sep.h5')
+model = load_model('/home/octo/Dropbox/trading_system/system_L1P0/28sep.h5')
 
 # convert an array of values into a dataset matrix
 def create_dataset(dataset, look_back=1):
@@ -275,127 +261,47 @@ def strat_LSTM(df_LSTM):
     
     return df_LSTM
 
-
-# In[11]:
-
 #df = pd.DataFrame()
-dfsave=pd.DataFrame()
+filename = '/home/octo/Dropbox'+ '/SPY28Nov.csv'
+df_load=pd.read_csv(filename,sep=',',dtype={'askPrice':np.float32,'askSize':np.float32,
+                                           'bidPrice':np.float32,'bidSize':np.float32},index_col=0,parse_dates=True)
+df = df_load[20000:20600]
 
-
-# In[6]:
+df.head()
 
 print ("publishing to  <7010> for plot.")
 
-
-# In[12]:
-
-## warm up upto preprocessing
-window=200
-for _ in range(window):
-#while True:
-    iterations += 1
-    string = socket_sub.recv_string()
-    sym, bidPrice,bidSize,askPrice,askSize = string.split()
-    #print('%s %s %s %s %s' % (sym, bidPrice,bidSize,askPrice,askSize))
-    dt = datetime.datetime.now()
-    df = df.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
-    dfsave = dfsave.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
-
-    df=df.tail(600)
-    dfsave=dfsave.tail(600)
+if __name__ == '__main__':
+    while True:
+        iterations += 1
+        string = socket_sub.recv_string()
+        sym, bidPrice,bidSize,askPrice,askSize = string.split()
+        #print('%s %s %s %s %s' % (sym, bidPrice,bidSize,askPrice,askSize))
+        dt = datetime.datetime.now()
+        df = df.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
+        df=df.tail(600)
+        preprocessing()
+        arima_processing()# 60 data points needed for this process.
+        #dfn=normalise(df,60)
+        #data=de_normalise(dfn,60)
+        arima=ARIMA_()#ARIMA
+        km=kalman_ma()#kalman
+        UD=classification_up_dn()#classification
+        RS=strat_lr()#regression
+        #df[['mid','vwap','arima','km','REG','SVR']]
+        #df[['mid','vwap','arima','km','REG','SVR']]
+        df_LSTM=df[['mid','vwap']]
+        df_LSTM['arima']=arima
+        df_LSTM['km']=km
+        df_LSTM['UD']=UD.UD
+        df_LSTM['REG']=RS.nREG
+        df_LSTM['SVR']=RS.nSVR
+        LSTM=strat_LSTM(df_LSTM)
+        final=LSTM[['mid','REG','SVR','arima','km','LSTM','UD']]
+        final.insert(loc=0, column='Stock', value=df.Stock)
     
-    dfsave.to_csv('/home/octo/Dropbox/ba.csv', sep=',', encoding='utf-8')
+        final.to_csv('/home/octo/Dropbox/final_ML.csv', sep=',', encoding='utf-8')
     
-    preprocessing()
-    arima_processing()# 60 data points needed for this process.
-    #dfn=normalise(df,60)
-    #data=de_normalise(dfn,60)
-    
-    arima=ARIMA_()#ARIMA
-    km=kalman_ma()#kalman
-    UD=classification_up_dn()#classification
-    RS=strat_lr()#regression
-    #df[['mid','vwap','arima','km','REG','SVR']]
-    df_LSTM=df[['mid','vwap']]
-    df_LSTM['arima']=arima
-    df_LSTM['km']=km
-    df_LSTM['UD']=UD.UD
-    df_LSTM['REG']=RS.nREG
-    df_LSTM['SVR']=RS.nSVR
-    LSTM=strat_LSTM(df_LSTM)
-    final=LSTM[['mid','REG','SVR','arima','km','LSTM','UD']]
-    final.insert(loc=0, column='Stock', value=df.Stock)
-    
-    final.to_csv('/home/octo/Dropbox/final_ML.csv', sep=',', encoding='utf-8')
-    
-    x = final.to_string(header=False,index=False,index_names=False).split('\n')
-    socket_pub.send_string(x[-1])
-    #print(x[-1]) 
-
-
-# In[15]:
-
-#len(dfsave.dropna())
-
-
-# In[22]:
-
-#df.dropna().head()
-
-
-# In[16]:
-
-#len(final.dropna())
-
-
-# In[26]:
-
-#final.dropna().head()
-
-
-# In[ ]:
-
-while True:
-    iterations += 1
-    string = socket_sub.recv_string()
-    sym, bidPrice,bidSize,askPrice,askSize = string.split()
-    #print('%s %s %s %s %s' % (sym, bidPrice,bidSize,askPrice,askSize))
-    dt = datetime.datetime.now()
-    df = df.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
-    dfsave = dfsave.append(pd.DataFrame({'Stock':sym,'bidPrice': float(bidPrice),'bidSize': float(bidSize),'askPrice': float(askPrice),'askSize': float(askSize)},index=[dt]))
-
-    df=df.tail(600)
-    #dfsave=dfsave.tail(600)
-    
-    dfsave.to_csv('/home/octo/Dropbox/ba.csv', sep=',', encoding='utf-8')
-    
-    preprocessing()
-    arima_processing()# 60 data points needed for this process.
-    #dfn=normalise(df,60)
-    #data=de_normalise(dfn,60)
-    
-    arima=ARIMA_()#ARIMA
-    km=kalman_ma()#kalman
-    UD=classification_up_dn()#classification
-    RS=strat_lr()#regression
-    #df[['mid','vwap','arima','km','REG','SVR']]
-    df_LSTM=df[['mid','vwap']]
-    df_LSTM['arima']=arima
-    df_LSTM['km']=km
-    df_LSTM['UD']=UD.UD
-    df_LSTM['REG']=RS.nREG
-    df_LSTM['SVR']=RS.nSVR
-    LSTM=strat_LSTM(df_LSTM)
-    final=LSTM[['mid','REG','SVR','arima','km','LSTM','UD']]
-    final.insert(loc=0, column='Stock', value=df.Stock)
-    
-    final.to_csv('/home/octo/Dropbox/final_ML.csv', sep=',', encoding='utf-8')
-    
-    x = final.to_string(header=False,index=False,index_names=False).split('\n')
-    socket_pub.send_string(x[-1])
-    #print(x[-1]) 
-
-
-# In[ ]:
-
-
+        x = final.to_string(header=False,index=False,index_names=False).split('\n')
+        socket_pub.send_string(x[-1])
+        print(x[-1])
