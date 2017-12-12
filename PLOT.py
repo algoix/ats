@@ -1,8 +1,3 @@
-
-# coding: utf-8
-
-# In[1]:
-
 import tpqib
 import datetime
 import zmq
@@ -28,11 +23,6 @@ import plotly.tools as tls
 from plotly.graph_objs import *
 import cufflinks
 
-print ("Collecting from <7010>.....")
-
-
-# In[2]:
-
 pc = json.load(open('creds/plotly_creds.json', 'r'))
 
 plyt.set_credentials_file(username=pc['username'], api_key=pc['api_key'])
@@ -42,7 +32,8 @@ plyst.plotly_stream.set_stream_tokens(pc['stream_ids'])
 #!pip install --upgrade pyopenssl
 pcreds = json.load(open('creds/plotly_creds.json', 'r'))
 py.sign_in(pcreds['username'], pcreds['api_key'])
-from autobahn.twisted.websocket import WebSocketClientProtocol,                                        WebSocketClientFactory
+from autobahn.twisted.websocket import WebSocketClientProtocol, \
+                                       WebSocketClientFactory
     
 # plotly preparations
 
@@ -84,9 +75,6 @@ s1 = py.Stream(stream_ids[1])
 s0.open()
 s1.open()
 
-
-# In[3]:
-
 context = zmq.Context()
 # Subscribing to ML 
 port = "7010"
@@ -102,9 +90,6 @@ socket_sub1.setsockopt_string(zmq.SUBSCRIBE, u'SPY')
 # publishing for acount, holding and trading info
 socket_pub1 = context.socket(zmq.PUB)
 socket_pub1.bind('tcp://127.0.0.1:7040')
-
-
-# In[4]:
 
 def preprocessing():
     df.bidPrice=df.loc[:,'bidPrice'].replace(to_replace=0, method='ffill')
@@ -123,14 +108,8 @@ def preprocessing():
     df['sigma']=df.spread.rolling(60).std()
     #return df
 
-
-# In[5]:
-
 df = pd.DataFrame()
 df_val=pd.DataFrame()
-
-
-# In[ ]:
 
 #window=20
 #for _ in range(window):
@@ -166,9 +145,4 @@ while True:
         
     x = df[['Stock','mid']].to_string(header=False,index=False).split('\n')
     socket_pub1.send_string(x[-1])
-    #print(x[-1])    
-
-
-# In[ ]:
-
-
+    print(x[-1])   
