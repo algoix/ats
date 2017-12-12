@@ -74,11 +74,7 @@ def send_tick(field, value):
         socket_pub.send_string(msg)
 
 
-average=0
-quantity=0
-pos=conn.req_positions()
-average=pos[pos['sym']=='SPY'].tail(1).avgCost
-quantity=pos[pos['sym']=='SPY'].tail(1).quantity
+
 
 # TRADING
 port1 = "7040"
@@ -103,9 +99,12 @@ if __name__ == '__main__':
 
     #conn.cancel_market_data(request_id)
     #conn.close()  
-
-    while True:
-      
+    while True:	
+        average=0
+        quantity=0
+        pos=conn.req_positions()
+        #average=pos[pos['sym']=='SPY'].tail(1).avgCost
+        #quantity=pos[pos['sym']=='SPY'].tail(1).quantity
         dt = datetime.datetime.now()
 
         string = socket_sub1.recv_string()
@@ -118,7 +117,7 @@ if __name__ == '__main__':
 
         #global request_id
     
-        #value=df.mid.tail(1)
+        value=df.mid.tail(1)
         predicted_value=df_val.LSTM.tail(300)+(df.mid.tail(300)-df_val.mid.tail(300))
         predicted_mean=df_val.km.tail(300)+(df.mid.tail(300)-df_val.mid.tail(300))
         df=df.tail(300)
@@ -127,16 +126,8 @@ if __name__ == '__main__':
         df['UD']=df_val.UD.tail(300)
         df.to_csv('/home/octo/Dropbox/final_TRADE.csv', sep=',', encoding='utf-8')
     
-        #final=df[['pv','UD']]
-        #final.to_csv('/home/octo/Dropbox/ml_output.txt', sep=',', encoding='utf-8')
+        final=df[['pv','UD']]
         pos=conn.req_positions()
-        #print(pos)
-        average=pos[pos['sym']=='SPY'].tail(1).avgCost
-        quantity=pos[pos['sym']=='SPY'].tail(1).quantity
-    
-        #df_val['quantity']=float(quantity)
-        #df_val['average']=float(average)
-       
-    
-        x = final.to_string(header=False,index=False).split('\n')
+
+        x = df.to_string(header=False,index=False,index_names=False).split('\n')
         print(x[-1])
