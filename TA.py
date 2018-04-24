@@ -1,9 +1,8 @@
-import numpy  
-import pandas as pd  
+import pandas as pd
+import numpy
+import numpy as np
 import math as m
 
-
-#Moving Average  
 def MA(df, n):  
     MA = pd.Series(pd.rolling_mean(df['Close'], n), name = 'MA_' + str(n))  
     df = df.join(MA)  
@@ -168,6 +167,9 @@ def Vortex(df, n):
     VI = pd.Series(pd.rolling_sum(pd.Series(VM), n) / pd.rolling_sum(pd.Series(TR), n), name = 'Vortex_' + str(n))  
     df = df.join(VI)  
     return df
+
+
+
 
 
 #KST Oscillator  
@@ -354,4 +356,54 @@ def DONCH(df, n):
 #Standard Deviation  
 def STDDEV(df, n):  
     df = df.join(pd.Series(pd.rolling_std(df['Close'], n), name = 'STD_' + str(n)))  
-    return df 
+    return df  
+
+#Moving Average  
+# Simple Moving Average 
+def SMA(data, ndays): 
+ SMA = pd.Series(pd.rolling_mean(data['Close'], ndays), name = 'SMA') 
+ data = data.join(SMA) 
+ return data
+
+# Exponentially-weighted Moving Average 
+def EWMA(data, ndays): 
+ EMA = pd.Series(pd.ewma(data['Close'], span = ndays, min_periods = ndays - 1), 
+ name = 'EWMA_' + str(ndays)) 
+ data = data.join(EMA) 
+ return data
+n=12
+# Commodity Channel Index 
+def CCI(data, ndays): 
+ TP = (data['High'] + data['Low'] + data['Close']) / 3 
+ CCI = pd.Series((TP - pd.rolling_mean(TP, ndays)) / (0.015 * pd.rolling_std(TP, ndays)),
+ name = 'CCI') 
+ data = data.join(CCI) 
+ return data
+# Ease of Movement 
+def EVM(data, ndays): 
+ dm = ((data['High'] + data['Low'])/2) - ((data['High'].shift(1) + data['Low'].shift(1))/2)
+ br = (data['Volume'] / 100000000) / ((data['High'] - data['Low']))
+ EVM = dm / br 
+ EVM_MA = pd.Series(pd.rolling_mean(EVM, ndays), name = 'EVM') 
+ data = data.join(EVM_MA) 
+ return data 
+
+# Rate of Change (ROC)
+def ROC(data,n):
+ N = data['Close'].diff(n)
+ D = data['Close'].shift(n)
+ ROC = pd.Series(N/D,name='Rate of Change')
+ data = data.join(ROC)
+ return data 
+# Compute the Bollinger Bands 
+def BBANDS(data, window=n):
+ MA = data.Close.rolling(window=n).mean()
+ SD = data.Close.rolling(window=n).std()
+ data['UpperBB'] = MA + (2 * SD) 
+ data['LowerBB'] = MA - (2 * SD)
+ return data
+# Force Index 
+def ForceIndex(data, ndays): 
+ FI = pd.Series(data['Close'].diff(ndays) * data['Volume'], name = 'ForceIndex') 
+ data = data.join(FI) 
+ return data
